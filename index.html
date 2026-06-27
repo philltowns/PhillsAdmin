@@ -400,7 +400,7 @@
 
 <script>
 // ── CONFIG ── (replace with your actual Dropbox App Key)
-const DROPBOX_APP_KEY = 'kg70xibrafahre2';
+const DROPBOX_APP_KEY = 'YOUR_APP_KEY_HERE';
 const REDIRECT_URI = 'https://philltowns.github.io/PhillsAdmin/';
 const DATA_FILE = '/PhillsAdmin/data.json';
 
@@ -431,8 +431,7 @@ function handleOAuthCallback() {
   const hash = window.location.hash.substring(1);
   const params = new URLSearchParams(hash);
   const token = params.get('access_token');
-  const state = params.get('state');
-  if (token && state === localStorage.getItem('dbx_state')) {
+  if (token) {
     localStorage.setItem('dbx_token', token);
     window.history.replaceState({}, document.title, window.location.pathname);
     return token;
