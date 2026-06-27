@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phill's Admin</title>
+  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    :root {
+      --bg:       #0f0f1a;
+      --surface:  #1a1a2e;
+      --card:     #22223b;
+      --border:   #2d2d4e;
+      --accent:   #7c6af7;
+      --accent2:  #f7c948;
+      --success:  #4ade80;
+      --danger:   #f87171;
+      --text:     #e8e8f0;
+      --muted:    #8888aa;
+      --font:     'Inter', sans-serif;
+      --mono:     'JetBrains Mono', monospace;
+      --radius:   12px;
+      --radius-sm:6px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── AUTH SCREEN ── */
+    #auth-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: 2rem;
+      gap: 1.5rem;
+      text-align: center;
+    }
+    #auth-screen h1 { font-size: 2rem; font-weight: 600; letter-spacing: -0.03em; }
+    #auth-screen p { color: var(--muted); max-width: 280px; line-height: 1.6; }
+    .auth-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.875rem 2rem;
+      border-radius: var(--radius);
+      font-size: 1rem;
+      font-family: var(--font);
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .auth-btn:hover { opacity: 0.85; }
+    .logo-mark {
+      width: 64px; height: 64px;
+      background: var(--accent);
+      border-radius: 18px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem;
+    }
+
+    /* ── LAYOUT ── */
+    #app { display: none; flex-direction: column; min-height: 100dvh; }
+    #app.visible { display: flex; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.02em; }
+    .sync-btn {
+      background: none; border: 1px solid var(--border);
+      color: var(--muted); padding: 0.35rem 0.75rem;
+      border-radius: var(--radius-sm); font-size: 0.75rem;
+      font-family: var(--font); cursor: pointer; transition: all 0.15s;
+    }
+    .sync-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .sync-btn.syncing { color: var(--accent2); border-color: var(--accent2); }
+
+    nav {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      position: fixed; bottom: 0; left: 0; right: 0;
+      z-index: 100;
+    }
+    nav button {
+      flex: 1; background: none; border: none;
+      color: var(--muted); padding: 0.6rem 0.25rem 0.75rem;
+      display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
+      font-size: 0.6rem; font-family: var(--font); cursor: pointer;
+      transition: color 0.15s; border-top: 2px solid transparent;
+    }
+    nav button.active { color: var(--accent); border-top-color: var(--accent); }
+    nav button span.icon { font-size: 1.25rem; }
+
+    main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      padding-bottom: 5rem;
+    }
+
+    /* ── CARDS & SECTIONS ── */
+    .section-title {
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--muted);
+      margin: 1.25rem 0 0.6rem;
+    }
+    .section-title:first-child { margin-top: 0; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.875rem 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    /* ── TASKS ── */
+    .bucket-tabs {
+      display: flex; gap: 0.5rem; margin-bottom: 1rem;
+    }
+    .bucket-tab {
+      flex: 1; background: var(--card); border: 1px solid var(--border);
+      color: var(--muted); padding: 0.5rem; border-radius: var(--radius-sm);
+      font-size: 0.8rem; font-family: var(--font); cursor: pointer; transition: all 0.15s;
+      text-align: center;
+    }
+    .bucket-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .task-item {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.75rem 0; border-bottom: 1px solid var(--border);
+    }
+    .task-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .task-check {
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 2px solid var(--border); background: none;
+      cursor: pointer; flex-shrink: 0; margin-top: 1px;
+      transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+    }
+    .task-check.done { background: var(--success); border-color: var(--success); }
+    .task-check.done::after { content: '✓'; color: #000; font-size: 0.7rem; font-weight: 700; }
+    .task-text { flex: 1; font-size: 0.9rem; line-height: 1.4; }
+    .task-text.done { text-decoration: line-through; color: var(--muted); }
+    .task-meta { font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
+    .task-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 0.25rem; }
+    .task-del:hover { color: var(--danger); }
+
+    .add-row {
+      display: flex; gap: 0.5rem; margin-top: 0.75rem;
+    }
+    .add-input {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 0.6rem 0.75rem; border-radius: var(--radius-sm);
+      font-size: 0.9rem; font-family: var(--font); outline: none;
+    }
+    .add-input:focus { border-color: var(--accent); }
+    .add-btn {
+      background: var(--accent); border: none; color: #fff;
+      padding: 0.6rem 1rem; border-radius: var(--radius-sm);
+      font-family: var(--font); font-size: 0.9rem; cursor: pointer;
+    }
+
+    .recurring-badge {
+      font-size: 0.65rem; background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); padding: 0.1rem 0.4rem; border-radius: 99px;
+      margin-left: 0.4rem; vertical-align: middle;
+    }
+
+    /* ── BIRTHDAYS ── */
+    .birthday-item {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.75rem 0; border-bottom: 1px solid var(--border);
+    }
+    .birthday-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .birthday-avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--accent); display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 0.9rem; flex-shrink: 0;
+    }
+    .birthday-info { flex: 1; }
+    .birthday-name { font-size: 0.9rem; font-weight: 500; }
+    .birthday-date { font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
+    .days-pill {
+      font-size: 0.75rem; font-family: var(--mono);
+      padding: 0.2rem 0.5rem; border-radius: 99px; font-weight: 500;
+    }
+    .days-pill.soon { background: rgba(247,201,72,0.15); color: var(--accent2); }
+    .days-pill.today { background: rgba(74,222,128,0.15); color: var(--success); }
+    .days-pill.later { background: var(--surface); color: var(--muted); }
+
+    /* ── STATEMENTS ── */
+    .statements-scroll { overflow-x: auto; }
+    .statements-table {
+      border-collapse: collapse; width: 100%; min-width: 400px;
+      font-size: 0.8rem;
+    }
+    .statements-table th {
+      text-align: left; padding: 0.5rem 0.6rem;
+      color: var(--muted); font-weight: 500; font-size: 0.7rem;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .statements-table td {
+      padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .stmt-account { font-weight: 500; }
+    .stmt-day { color: var(--muted); font-size: 0.75rem; font-family: var(--mono); }
+    .stmt-cell {
+      width: 52px; text-align: center;
+    }
+    .stmt-tick {
+      width: 26px; height: 26px; border-radius: 6px;
+      border: 1.5px solid var(--border); background: none;
+      cursor: pointer; margin: auto; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; font-size: 0.8rem;
+    }
+    .stmt-tick.checked { background: var(--success); border-color: var(--success); color: #000; }
+    .stmt-tick.due { border-color: var(--accent2); }
+    .stmt-tick.due:not(.checked) { box-shadow: 0 0 0 2px rgba(247,201,72,0.3); }
+
+    .add-account-form {
+      display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem;
+      margin-top: 0.75rem; align-items: end;
+    }
+    .add-account-form label { font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.25rem; }
+
+    /* ── JOURNAL ── */
+    .journal-entry-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem;
+    }
+    .journal-date { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.5rem; font-family: var(--mono); }
+    .journal-textarea {
+      width: 100%; background: none; border: none; color: var(--text);
+      font-family: var(--font); font-size: 0.9rem; line-height: 1.6;
+      resize: none; outline: none; min-height: 80px;
+    }
+    .journal-prompt {
+      font-size: 0.8rem; color: var(--accent); margin-bottom: 0.75rem; font-style: italic;
+    }
+    .past-entry {
+      border-left: 2px solid var(--border); padding-left: 0.75rem; margin-bottom: 0.75rem;
+    }
+    .past-entry-date { font-size: 0.7rem; color: var(--muted); font-family: var(--mono); margin-bottom: 0.25rem; }
+    .past-entry-text { font-size: 0.85rem; line-height: 1.5; color: var(--text); }
+
+    /* ── WATCHLIST ── */
+    .watch-filters {
+      display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;
+    }
+    .watch-filter {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--muted); padding: 0.35rem 0.75rem;
+      border-radius: 99px; font-size: 0.78rem; font-family: var(--font);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .watch-filter.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .watch-item {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.75rem 0; border-bottom: 1px solid var(--border);
+    }
+    .watch-item:last-child { border-bottom: none; }
+    .watch-type {
+      font-size: 0.65rem; padding: 0.15rem 0.45rem; border-radius: 99px;
+      font-weight: 500; flex-shrink: 0;
+    }
+    .watch-type.film { background: rgba(124,106,247,0.2); color: var(--accent); }
+    .watch-type.tv { background: rgba(247,201,72,0.15); color: var(--accent2); }
+    .watch-title { flex: 1; font-size: 0.9rem; }
+    .watch-title.watched { text-decoration: line-through; color: var(--muted); }
+    .watch-check {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid var(--border); background: none;
+      cursor: pointer; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; font-size: 0.75rem;
+    }
+    .watch-check.watched { background: var(--success); border-color: var(--success); color: #000; }
+
+    .watch-add-row {
+      display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;
+    }
+    .watch-type-select {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 0.6rem 0.5rem; border-radius: var(--radius-sm);
+      font-family: var(--font); font-size: 0.85rem; outline: none;
+    }
+
+    /* ── WEIGHT ── */
+    .weight-log-row {
+      display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;
+    }
+    .weight-input {
+      width: 100px; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 0.6rem 0.75rem; border-radius: var(--radius-sm);
+      font-size: 1rem; font-family: var(--mono); outline: none; text-align: center;
+    }
+    .weight-input:focus { border-color: var(--accent); }
+    .weight-unit { color: var(--muted); font-size: 0.9rem; }
+    .weight-latest {
+      font-size: 2rem; font-family: var(--mono); font-weight: 500;
+      color: var(--accent); letter-spacing: -0.03em;
+    }
+    .weight-latest-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+    .weight-stats { display: flex; gap: 1rem; margin: 1rem 0; }
+    .weight-stat { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem; text-align: center; }
+    .weight-stat-val { font-size: 1.1rem; font-family: var(--mono); font-weight: 500; }
+    .weight-stat-label { font-size: 0.65rem; color: var(--muted); margin-top: 0.2rem; }
+
+    canvas { width: 100% !important; }
+
+    /* ── TARGET LINE INPUT ── */
+    .target-row {
+      display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;
+    }
+    .target-row label { font-size: 0.8rem; color: var(--muted); }
+
+    /* ── MISC ── */
+    .empty-state {
+      text-align: center; color: var(--muted); padding: 2rem 1rem;
+      font-size: 0.9rem; line-height: 1.6;
+    }
+    .toast {
+      position: fixed; bottom: 5.5rem; left: 50%; transform: translateX(-50%);
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); padding: 0.6rem 1.25rem;
+      border-radius: 99px; font-size: 0.85rem;
+      opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 200;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+
+    select option { background: var(--card); }
+  </style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen">
+  <div class="logo-mark">📋</div>
+  <h1>Phill's Admin</h1>
+  <p>Connect to Dropbox to load your data and keep everything backed up.</p>
+  <button class="auth-btn" onclick="startDropboxAuth()">Connect Dropbox</button>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <header>
+    <h1>📋 Phill's Admin</h1>
+    <button class="sync-btn" id="sync-btn" onclick="syncDropbox()">↻ Sync</button>
+  </header>
+
+  <main id="main-content"></main>
+
+  <nav>
+    <button onclick="showTab('tasks')" id="nav-tasks" class="active">
+      <span class="icon">✅</span>Tasks
+    </button>
+    <button onclick="showTab('birthdays')" id="nav-birthdays">
+      <span class="icon">🎂</span>Birthdays
+    </button>
+    <button onclick="showTab('statements')" id="nav-statements">
+      <span class="icon">🏦</span>Statements
+    </button>
+    <button onclick="showTab('journal')" id="nav-journal">
+      <span class="icon">✨</span>Journal
+    </button>
+    <button onclick="showTab('watchlist')" id="nav-watchlist">
+      <span class="icon">🎬</span>Watch
+    </button>
+    <button onclick="showTab('weight')" id="nav-weight">
+      <span class="icon">⚖️</span>Weight
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ── (replace with your actual Dropbox App Key)
+const DROPBOX_APP_KEY = 'YOUR_APP_KEY_HERE';
+const REDIRECT_URI = 'https://philltowns.github.io/PhillsAdmin/';
+const DATA_FILE = '/PhillsAdmin/data.json';
+
+// ── STATE ──
+let data = {
+  tasks: [],
+  birthdays: [],
+  statements: { accounts: [], months: {} },
+  journal: [],
+  watchlist: [],
+  weight: { entries: [], target: null }
+};
+let accessToken = null;
+let currentTab = 'tasks';
+let currentBucket = 'today';
+let currentWatchFilter = 'all';
+let weightChart = null;
+
+// ── DROPBOX AUTH ──
+function startDropboxAuth() {
+  const state = Math.random().toString(36).slice(2);
+  localStorage.setItem('dbx_state', state);
+  const url = `https://www.dropbox.com/oauth2/authorize?client_id=${DROPBOX_APP_KEY}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`;
+  window.location.href = url;
+}
+
+function handleOAuthCallback() {
+  const hash = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+  const token = params.get('access_token');
+  const state = params.get('state');
+  if (token && state === localStorage.getItem('dbx_state')) {
+    localStorage.setItem('dbx_token', token);
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return token;
+  }
+  return null;
+}
+
+async function dropboxRequest(path, method = 'POST', headers = {}, body = null) {
+  const res = await fetch(`https://api.dropboxapi.com/2${path}`, {
+    method,
+    headers: { 'Authorization': `Bearer ${accessToken}`, ...headers },
+    body
+  });
+  return res;
+}
+
+async function loadFromDropbox() {
+  try {
+    const res = await fetch('https://content.dropboxapi.com/2/files/download', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Dropbox-API-Arg': JSON.stringify({ path: DATA_FILE })
+      }
+    });
+    if (res.status === 409) {
+      // File doesn't exist yet — use defaults
+      await saveToDropbox();
+      return;
+    }
+    const json = await res.json();
+    // Merge carefully to preserve structure
+    if (json.tasks) data.tasks = json.tasks;
+    if (json.birthdays) data.birthdays = json.birthdays;
+    if (json.statements) data.statements = json.statements;
+    if (json.journal) data.journal = json.journal;
+    if (json.watchlist) data.watchlist = json.watchlist;
+    if (json.weight) data.weight = json.weight;
+    localStorage.setItem('dbx_cache', JSON.stringify(data));
+  } catch (e) {
+    // Fall back to cache
+    const cached = localStorage.getItem('dbx_cache');
+    if (cached) data = JSON.parse(cached);
+    showToast('Offline — using cached data');
+  }
+}
+
+async function saveToDropbox() {
+  try {
+    setSyncState('syncing');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    await fetch('https://content.dropboxapi.com/2/files/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Dropbox-API-Arg': JSON.stringify({ path: DATA_FILE, mode: 'overwrite', autorename: false }),
+        'Content-Type': 'application/octet-stream'
+      },
+      body: blob
+    });
+    localStorage.setItem('dbx_cache', JSON.stringify(data));
+    setSyncState('done');
+    showToast('Saved to Dropbox ✓');
+  } catch (e) {
+    setSyncState('error');
+    showToast('Save failed — check connection');
+  }
+}
+
+async function syncDropbox() {
+  await loadFromDropbox();
+  renderCurrentTab();
+  showToast('Synced ✓');
+}
+
+function setSyncState(state) {
+  const btn = document.getElementById('sync-btn');
+  if (state === 'syncing') { btn.textContent = '↻ Saving…'; btn.classList.add('syncing'); }
+  else { btn.textContent = '↻ Sync'; btn.classList.remove('syncing'); }
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── TABS ──
+function showTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(`nav-${tab}`).classList.add('active');
+  renderCurrentTab();
+}
+
+function renderCurrentTab() {
+  if (currentTab === 'tasks') renderTasks();
+  else if (currentTab === 'birthdays') renderBirthdays();
+  else if (currentTab === 'statements') renderStatements();
+  else if (currentTab === 'journal') renderJournal();
+  else if (currentTab === 'watchlist') renderWatchlist();
+  else if (currentTab === 'weight') renderWeight();
+}
+
+// ── UTILS ──
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function today() { return new Date().toISOString().slice(0, 10); }
+function fmtDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// ── TASKS ──
+function renderTasks() {
+  const el = document.getElementById('main-content');
+  const buckets = [
+    { id: 'today', label: 'Today' },
+    { id: 'soon', label: 'Soon' },
+    { id: 'someday', label: 'Someday' }
+  ];
+  const filtered = data.tasks.filter(t => t.bucket === currentBucket);
+
+  el.innerHTML = `
+    <div class="bucket-tabs">
+      ${buckets.map(b => `<button class="bucket-tab ${currentBucket === b.id ? 'active' : ''}" onclick="setBucket('${b.id}')">${b.label}</button>`).join('')}
+    </div>
+    <div class="card">
+      ${filtered.length === 0 ? `<div class="empty-state">No tasks here yet.</div>` : filtered.map(t => `
+        <div class="task-item">
+          <button class="task-check ${t.done ? 'done' : ''}" onclick="toggleTask('${t.id}')"></button>
+          <div style="flex:1">
+            <div class="task-text ${t.done ? 'done' : ''}">${escHtml(t.text)}${t.recurring ? `<span class="recurring-badge">${t.recurringFreq || 'recurring'}</span>` : ''}</div>
+          </div>
+          <button class="task-del" onclick="deleteTask('${t.id}')">✕</button>
+        </div>
+      `).join('')}
+      <div class="add-row">
+        <input class="add-input" id="task-input" placeholder="Add a task…" onkeydown="if(event.key==='Enter')addTask()" />
+        <button class="add-btn" onclick="addTask()">Add</button>
+      </div>
+      <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center">
+        <input type="checkbox" id="task-recurring" style="accent-color:var(--accent)">
+        <label for="task-recurring" style="font-size:0.8rem;color:var(--muted)">Recurring</label>
+        <select id="task-freq" class="watch-type-select" style="font-size:0.78rem;padding:0.3rem 0.4rem">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+    </div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem;text-align:center">
+      ${filtered.filter(t=>t.done).length} of ${filtered.length} done
+    </p>
+  `;
+}
+
+function setBucket(b) { currentBucket = b; renderTasks(); }
+
+function addTask() {
+  const inp = document.getElementById('task-input');
+  const text = inp.value.trim();
+  if (!text) return;
+  const recurring = document.getElementById('task-recurring').checked;
+  const freq = document.getElementById('task-freq').value;
+  data.tasks.push({ id: uid(), text, bucket: currentBucket, done: false, recurring, recurringFreq: recurring ? freq : null, created: today() });
+  inp.value = '';
+  saveToDropbox();
+  renderTasks();
+}
+
+function toggleTask(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  if (t.done && t.recurring) {
+    // Reset for next occurrence
+    t.done = false;
+  } else {
+    t.done = !t.done;
+  }
+  saveToDropbox();
+  renderTasks();
+}
+
+function deleteTask(id) {
+  data.tasks = data.tasks.filter(x => x.id !== id);
+  saveToDropbox();
+  renderTasks();
+}
+
+// ── BIRTHDAYS ──
+function daysUntilBirthday(mmdd) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const [m, d] = mmdd.split('-').map(Number);
+  let next = new Date(year, m - 1, d);
+  if (next < now) next = new Date(year + 1, m - 1, d);
+  return Math.ceil((next - now) / 86400000);
+}
+
+function renderBirthdays() {
+  const el = document.getElementById('main-content');
+  const sorted = [...data.birthdays].sort((a, b) => daysUntilBirthday(a.mmdd) - daysUntilBirthday(b.mmdd));
+
+  el.innerHTML = `
+    <div class="card">
+      ${sorted.length === 0 ? `<div class="empty-state">No birthdays added yet.</div>` : sorted.map(b => {
+        const days = daysUntilBirthday(b.mmdd);
+        const pillClass = days === 0 ? 'today' : days <= 14 ? 'soon' : 'later';
+        const pillText = days === 0 ? '🎉 Today!' : `${days}d`;
+        const initials = b.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        const [m, d] = b.mmdd.split('-').map(Number);
+        const dateStr = new Date(2000, m-1, d).toLocaleDateString('en-GB', {day:'numeric',month:'long'});
+        return `
+          <div class="birthday-item">
+            <div class="birthday-avatar">${initials}</div>
+            <div class="birthday-info">
+              <div class="birthday-name">${escHtml(b.name)}</div>
+              <div class="birthday-date">${dateStr}</div>
+            </div>
+            <span class="days-pill ${pillClass}">${pillText}</span>
+            <button class="task-del" onclick="deleteBirthday('${b.id}')">✕</button>
+          </div>
+        `;
+      }).join('')}
+      <div class="add-row" style="margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem">
+        <input class="add-input" id="bday-name" placeholder="Name" style="min-width:120px" />
+        <input class="add-input" id="bday-date" type="date" style="width:auto" />
+        <button class="add-btn" onclick="addBirthday()">Add</button>
+      </div>
+    </div>
+  `;
+}
+
+function addBirthday() {
+  const name = document.getElementById('bday-name').value.trim();
+  const dateVal = document.getElementById('bday-date').value;
+  if (!name || !dateVal) return;
+  const mmdd = dateVal.slice(5); // MM-DD
+  data.birthdays.push({ id: uid(), name, mmdd });
+  saveToDropbox();
+  renderBirthdays();
+}
+
+function deleteBirthday(id) {
+  data.birthdays = data.birthdays.filter(x => x.id !== id);
+  saveToDropbox();
+  renderBirthdays();
+}
+
+// ── STATEMENTS ──
+function getMonthCols() {
+  const cols = [];
+  const now = new Date();
+  for (let i = -2; i <= 3; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    cols.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  return cols;
+}
+
+function monthLabel(ym) {
+  const [y, m] = ym.split('-');
+  return new Date(y, m-1, 1).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
+}
+
+function isStatementDue(account, ym) {
+  const now = new Date();
+  const [y, m] = ym.split('-').map(Number);
+  const dueDate = new Date(y, m-1, account.dueDay);
+  return now >= dueDate;
+}
+
+function renderStatements() {
+  const el = document.getElementById('main-content');
+  const cols = getMonthCols();
+  const nowYM = today().slice(0,7);
+
+  // Surface any due reminders
+  const due = data.statements.accounts.filter(a => {
+    const key = `${a.id}_${nowYM}`;
+    return isStatementDue(a, nowYM) && !data.statements.months[key];
+  });
+
+  el.innerHTML = `
+    ${due.length > 0 ? `
+      <div style="background:rgba(247,201,72,0.1);border:1px solid rgba(247,201,72,0.3);border-radius:var(--radius);padding:0.75rem 1rem;margin-bottom:1rem">
+        <div style="font-size:0.75rem;color:var(--accent2);font-weight:600;margin-bottom:0.35rem">⚠ Statements to check</div>
+        ${due.map(a => `<div style="font-size:0.85rem">${escHtml(a.name)}</div>`).join('')}
+      </div>
+    ` : ''}
+    <div class="statements-scroll">
+      <table class="statements-table">
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Due day</th>
+            ${cols.map(c => `<th class="stmt-cell" style="${c===nowYM?'color:var(--accent)':''}">${monthLabel(c)}</th>`).join('')}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.statements.accounts.length === 0 ? `<tr><td colspan="${cols.length+3}" class="empty-state">No accounts yet.</td></tr>` :
+            data.statements.accounts.map(a => `
+              <tr>
+                <td class="stmt-account">${escHtml(a.name)}</td>
+                <td class="stmt-day">${a.dueDay}th</td>
+                ${cols.map(c => {
+                  const key = `${a.id}_${c}`;
+                  const checked = !!data.statements.months[key];
+                  const due = isStatementDue(a, c) && !checked;
+                  return `<td class="stmt-cell"><button class="stmt-tick ${checked?'checked':''} ${due?'due':''}" onclick="toggleStatement('${a.id}','${c}')">${checked?'✓':''}</button></td>`;
+                }).join('')}
+                <td><button class="task-del" onclick="deleteAccount('${a.id}')">✕</button></td>
+              </tr>
+            `).join('')
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <div class="section-title">Add account</div>
+      <div class="add-account-form">
+        <div>
+          <label>Account name</label>
+          <input class="add-input" id="acct-name" placeholder="e.g. Chase" style="width:100%" />
+        </div>
+        <div>
+          <label>Statement day</label>
+          <input class="add-input" id="acct-day" type="number" min="1" max="28" placeholder="7" style="width:70px;text-align:center" />
+        </div>
+        <button class="add-btn" onclick="addAccount()" style="align-self:flex-end">Add</button>
+      </div>
+    </div>
+  `;
+}
+
+function toggleStatement(accountId, ym) {
+  const key = `${accountId}_${ym}`;
+  if (data.statements.months[key]) {
+    delete data.statements.months[key];
+  } else {
+    data.statements.months[key] = today();
+  }
+  saveToDropbox();
+  renderStatements();
+}
+
+function addAccount() {
+  const name = document.getElementById('acct-name').value.trim();
+  const day = parseInt(document.getElementById('acct-day').value);
+  if (!name || !day || day < 1 || day > 28) { showToast('Enter a name and valid day (1–28)'); return; }
+  data.statements.accounts.push({ id: uid(), name, dueDay: day });
+  saveToDropbox();
+  renderStatements();
+}
+
+function deleteAccount(id) {
+  data.statements.accounts = data.statements.accounts.filter(x => x.id !== id);
+  // Clean up months
+  Object.keys(data.statements.months).forEach(k => { if (k.startsWith(id)) delete data.statements.months[k]; });
+  saveToDropbox();
+  renderStatements();
+}
+
+// ── JOURNAL ──
+const prompts = [
+  'What made you smile today?',
+  'What went better than expected?',
+  'Who or what are you grateful for today?',
+  'What's one small win from today?',
+  'What moment would you save from today?'
+];
+
+function renderJournal() {
+  const el = document.getElementById('main-content');
+  const todayStr = today();
+  const todayEntry = data.journal.find(e => e.date === todayStr);
+  const prompt = prompts[new Date().getDay() % prompts.length];
+  const past = [...data.journal].filter(e => e.date !== todayStr).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 20);
+
+  el.innerHTML = `
+    <div class="section-title">Today — ${fmtDate(todayStr)}</div>
+    <div class="journal-entry-box">
+      <div class="journal-prompt">${prompt}</div>
+      <textarea class="journal-textarea" id="journal-text" placeholder="Write something positive…">${todayEntry ? escHtml(todayEntry.text) : ''}</textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:0.5rem">
+        <button class="add-btn" onclick="saveJournal()">Save</button>
+      </div>
+    </div>
+    ${past.length > 0 ? `
+      <div class="section-title">Previous entries</div>
+      <div class="card">
+        ${past.map(e => `
+          <div class="past-entry">
+            <div class="past-entry-date">${fmtDate(e.date)}</div>
+            <div class="past-entry-text">${escHtml(e.text)}</div>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+  `;
+}
+
+function saveJournal() {
+  const text = document.getElementById('journal-text').value.trim();
+  if (!text) return;
+  const todayStr = today();
+  const idx = data.journal.findIndex(e => e.date === todayStr);
+  if (idx >= 0) data.journal[idx].text = text;
+  else data.journal.push({ id: uid(), date: todayStr, text });
+  saveToDropbox();
+  showToast('Entry saved ✓');
+}
+
+// ── WATCHLIST ──
+function renderWatchlist() {
+  const el = document.getElementById('main-content');
+  let items = data.watchlist;
+  if (currentWatchFilter === 'film') items = items.filter(x => x.type === 'film');
+  else if (currentWatchFilter === 'tv') items = items.filter(x => x.type === 'tv');
+  else if (currentWatchFilter === 'unwatched') items = items.filter(x => !x.watched);
+  else if (currentWatchFilter === 'watched') items = items.filter(x => x.watched);
+
+  el.innerHTML = `
+    <div class="watch-filters">
+      ${['all','film','tv','unwatched','watched'].map(f => `
+        <button class="watch-filter ${currentWatchFilter===f?'active':''}" onclick="setWatchFilter('${f}')">${f.charAt(0).toUpperCase()+f.slice(1)}</button>
+      `).join('')}
+    </div>
+    <div class="card">
+      ${items.length === 0 ? `<div class="empty-state">Nothing here yet.</div>` :
+        items.map(w => `
+          <div class="watch-item">
+            <span class="watch-type ${w.type}">${w.type === 'film' ? '🎬 Film' : '📺 TV'}</span>
+            <span class="watch-title ${w.watched?'watched':''}">${escHtml(w.title)}</span>
+            <button class="watch-check ${w.watched?'watched':''}" onclick="toggleWatched('${w.id}')">${w.watched?'✓':''}</button>
+            <button class="task-del" onclick="deleteWatch('${w.id}')">✕</button>
+          </div>
+        `).join('')
+      }
+      <div class="watch-add-row">
+        <input class="add-input" id="watch-title" placeholder="Title…" style="flex:1;min-width:120px" onkeydown="if(event.key==='Enter')addWatch()" />
+        <select class="watch-type-select" id="watch-type">
+          <option value="film">Film</option>
+          <option value="tv">TV</option>
+        </select>
+        <button class="add-btn" onclick="addWatch()">Add</button>
+      </div>
+    </div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem;text-align:center">
+      ${data.watchlist.filter(w=>!w.watched).length} to watch · ${data.watchlist.filter(w=>w.watched).length} watched
+    </p>
+  `;
+}
+
+function setWatchFilter(f) { currentWatchFilter = f; renderWatchlist(); }
+
+function addWatch() {
+  const title = document.getElementById('watch-title').value.trim();
+  const type = document.getElementById('watch-type').value;
+  if (!title) return;
+  data.watchlist.push({ id: uid(), title, type, watched: false, added: today() });
+  saveToDropbox();
+  renderWatchlist();
+}
+
+function toggleWatched(id) {
+  const w = data.watchlist.find(x => x.id === id);
+  if (w) { w.watched = !w.watched; saveToDropbox(); renderWatchlist(); }
+}
+
+function deleteWatch(id) {
+  data.watchlist = data.watchlist.filter(x => x.id !== id);
+  saveToDropbox();
+  renderWatchlist();
+}
+
+// ── WEIGHT ──
+function renderWeight() {
+  const el = document.getElementById('main-content');
+  const entries = [...data.weight.entries].sort((a,b) => a.date.localeCompare(b.date));
+  const latest = entries[entries.length - 1];
+  const first = entries[0];
+  const change = latest && first && entries.length > 1 ? (latest.kg - first.kg).toFixed(1) : null;
+  const target = data.weight.target;
+
+  el.innerHTML = `
+    ${latest ? `
+      <div class="card" style="text-align:center;margin-bottom:1rem">
+        <div class="weight-latest">${latest.kg} <span style="font-size:1rem;color:var(--muted)">kg</span></div>
+        <div class="weight-latest-label">${fmtDate(latest.date)}</div>
+        ${change !== null ? `<div style="font-size:0.8rem;color:${parseFloat(change)<0?'var(--success)':'var(--danger)'};margin-top:0.25rem">${parseFloat(change)>0?'+':''}${change} kg overall</div>` : ''}
+      </div>
+    ` : ''}
+    <div class="card" style="margin-bottom:1rem">
+      <div class="section-title">Log weight</div>
+      <div class="weight-log-row">
+        <input class="weight-input" id="weight-val" type="number" step="0.1" placeholder="75.0" />
+        <span class="weight-unit">kg</span>
+        <input class="add-input" id="weight-date" type="date" value="${today()}" style="width:auto" />
+        <button class="add-btn" onclick="addWeight()">Log</button>
+      </div>
+      <div class="target-row">
+        <label>Target:</label>
+        <input class="weight-input" id="weight-target" type="number" step="0.1" placeholder="—" value="${target||''}" style="width:80px" />
+        <span class="weight-unit">kg</span>
+        <button class="add-btn" onclick="setTarget()" style="padding:0.4rem 0.75rem;font-size:0.8rem">Set</button>
+      </div>
+    </div>
+    ${entries.length > 1 ? `
+      <div class="card" style="margin-bottom:1rem">
+        <canvas id="weight-chart"></canvas>
+      </div>
+    ` : ''}
+    ${entries.length > 0 ? `
+      <div class="section-title">History</div>
+      <div class="card">
+        ${[...entries].reverse().slice(0,20).map(e => `
+          <div class="task-item">
+            <div style="flex:1;font-size:0.85rem">${fmtDate(e.date)}</div>
+            <div style="font-family:var(--mono);font-size:0.9rem">${e.kg} kg</div>
+            <button class="task-del" onclick="deleteWeight('${e.id}')">✕</button>
+          </div>
+        `).join('')}
+      </div>
+    ` : `<div class="empty-state">Log your first weight to get started.</div>`}
+  `;
+
+  if (entries.length > 1) drawWeightChart(entries);
+}
+
+function drawWeightChart(entries) {
+  // Load Chart.js dynamically
+  if (typeof Chart === 'undefined') {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+    s.onload = () => drawWeightChartInner(entries);
+    document.head.appendChild(s);
+  } else {
+    drawWeightChartInner(entries);
+  }
+}
+
+function drawWeightChartInner(entries) {
+  const canvas = document.getElementById('weight-chart');
+  if (!canvas) return;
+  if (weightChart) weightChart.destroy();
+  const labels = entries.map(e => {
+    const d = new Date(e.date+'T00:00:00');
+    return d.toLocaleDateString('en-GB', {day:'numeric',month:'short'});
+  });
+  const vals = entries.map(e => e.kg);
+  const target = data.weight.target;
+  const datasets = [{
+    label: 'Weight (kg)',
+    data: vals,
+    borderColor: '#7c6af7',
+    backgroundColor: 'rgba(124,106,247,0.1)',
+    tension: 0.3,
+    fill: true,
+    pointBackgroundColor: '#7c6af7',
+    pointRadius: 4
+  }];
+  if (target) {
+    datasets.push({
+      label: 'Target',
+      data: Array(vals.length).fill(target),
+      borderColor: '#f7c948',
+      borderDash: [5,4],
+      pointRadius: 0,
+      fill: false
+    });
+  }
+  weightChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#8888aa', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8888aa', font: { size: 10 } }, grid: { color: '#2d2d4e' } },
+        y: { ticks: { color: '#8888aa', font: { size: 10 } }, grid: { color: '#2d2d4e' } }
+      }
+    }
+  });
+}
+
+function addWeight() {
+  const val = parseFloat(document.getElementById('weight-val').value);
+  const dateVal = document.getElementById('weight-date').value;
+  if (!val || !dateVal) return;
+  // Remove any existing entry for same date
+  data.weight.entries = data.weight.entries.filter(e => e.date !== dateVal);
+  data.weight.entries.push({ id: uid(), kg: val, date: dateVal });
+  saveToDropbox();
+  renderWeight();
+}
+
+function setTarget() {
+  const val = parseFloat(document.getElementById('weight-target').value);
+  data.weight.target = val || null;
+  saveToDropbox();
+  renderWeight();
+}
+
+function deleteWeight(id) {
+  data.weight.entries = data.weight.entries.filter(x => x.id !== id);
+  saveToDropbox();
+  renderWeight();
+}
+
+// ── SECURITY ──
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── INIT ──
+async function init() {
+  // Check for OAuth callback
+  let token = handleOAuthCallback();
+  if (!token) token = localStorage.getItem('dbx_token');
+
+  if (!token) {
+    document.getElementById('auth-screen').style.display = 'flex';
+    return;
+  }
+
+  accessToken = token;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+
+  // Load cached data immediately for speed
+  const cached = localStorage.getItem('dbx_cache');
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed.tasks) data.tasks = parsed.tasks;
+      if (parsed.birthdays) data.birthdays = parsed.birthdays;
+      if (parsed.statements) data.statements = parsed.statements;
+      if (parsed.journal) data.journal = parsed.journal;
+      if (parsed.watchlist) data.watchlist = parsed.watchlist;
+      if (parsed.weight) data.weight = parsed.weight;
+    } catch(e) {}
+  }
+
+  renderTasks();
+
+  // Then fetch fresh from Dropbox
+  await loadFromDropbox();
+  renderCurrentTab();
+}
+
+init();
+</script>
+</body>
+</html>
