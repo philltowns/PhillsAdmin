@@ -597,65 +597,64 @@ function deleteBirthday(id){data.birthdays=data.birthdays.filter(x=>x.id!==id);s
 // STATEMENTS
 function getMonthCols(){
   const cols=[];const now=new Date();
-  for(let i=-2;i<=0;i++){const d=new Date(now.getFullYear(),now.getMonth()+i,1);cols.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);}
+  for(let i=-2;i<=0;i++){const d=new Date(now.getFullYear(),now.getMonth()+i,1);cols.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));}
   return cols;
 }
 function monthLabel(ym){const[y,m]=ym.split('-');return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'short',year:'2-digit'});}
-function renderStatements(){
-  const mc=el('main-content');
-  const cols=getMonthCols();const nowYM=realToday().slice(0,7);
-  const accounts=[...data.statements.accounts].sort((a,b)=>a.dueDay-b.dueDay);
-  const due=accounts.filter(a=>isStmtDue(a,nowYM)&&!data.statements.months[`${a.id}_${nowYM}`]);
-  mc.innerHTML=`
-${due.length?`<div class="due-banner"><div class="due-banner-title">⚠ Statements to check</div>${due.map(a=>`<div style="font-size:0.83rem">${escHtml(a.name)}</div>`).join('')}</div>`:''}
-<div class="stmt-wrap">
-<table class="stmt-table">
-<thead><tr><th>Account</th><th>Due</th>${cols.map(c=>`<th class="stmt-cell" style="${c===nowYM?'color:var(--module-color)':''}">${monthLabel(c)}</th>`).join('')}<th></th></tr></thead>
-<tbody>
-${accounts.length===0?`<tr><td colspan="${cols.length+3}" class="empty-state">No accounts yet.</td></tr>`:''}
-${accounts.map(a=>{
-  const freq=a.frequencyMonths||1;
-  return`<tr>
-<td class="stmt-acct">${escHtml(a.name)}</td>
-<td class="stmt-day">${ordinal(a.dueDay)}${freq>1?`<br><span style="font-size:0.65rem;color:var(--muted)">every ${freq}m</span>`:''}</td>
-${cols.map(c=>{
-  const isDueMon=isStmtDueCal(a,c);
-  const k=`${a.id}_${c}`;const ck=!!data.statements.months[k];
-  const du=isStmtDue(a,c)&&!ck;
-  if(!isDueMon&&!ck)return`<td class="stmt-cell"><div class="stmt-arrow">→</div></td>`;
-  return`<td class="stmt-cell"><button class="stmt-tick${ck?' checked':''}${du?' due':''}" onclick="toggleStmt('${a.id}','${c}')">${ck?'✓':''}</button></td>`;
-}).join('')}
-<td style="position:relative">
-<button class="opts-btn" onclick="toggleOptsMenu('stmt-${a.id}',event)">⋮</button>
-<div class="opts-menu" id="opts-stmt-${a.id}" style="right:0;top:1.8rem">
-<button onclick="openEditAcctModal('${a.id}')">✏️ Edit</button>
-<button class="danger-opt" onclick="deleteAcct('${a.id}')">🗑 Delete</button>
-</div>
-</td>
-</tr>`;}).join('')}
-</tbody>
-</table>
-</div>
-<div style="margin-top:1rem;text-align:center">
-<button class="add-btn" onclick="openAddAcctModal()">+ Add account</button>
-</div>`;
-}
-function toggleStmt(aid,ym){
-// STATEMENTS HELPERS
 function isStmtDueCal(acct,ym){
-  // Returns true if ym (YYYY-MM) is a due month for this account
   const freq=acct.frequencyMonths||1;
   if(freq===1)return true;
   const anchor=acct.anchorMonth||1;
-  const[y,m]=ym.split('-').map(Number);
-  // months since anchor month in year 0: diff mod freq === 0
-  const diff=((m-anchor)%freq+freq)%freq;
-  return diff===0;
+  const m=parseInt(ym.split('-')[1]);
+  return((m-anchor)%freq+freq)%freq===0;
 }
 function isStmtDue(acct,ym){
   if(!isStmtDueCal(acct,ym))return false;
-  const now=new Date();const[y,m]=ym.split('-').map(Number);
-  return now>=new Date(y,m-1,acct.dueDay+1);
+  const now=new Date();const pts=ym.split('-');
+  return now>=new Date(parseInt(pts[0]),parseInt(pts[1])-1,acct.dueDay+1);
+}
+function stmtCellHtml(a,c){
+  var isDueMon=isStmtDueCal(a,c);
+  var k=a.id+'_'+c;var ck=!!data.statements.months[k];
+  var du=isStmtDue(a,c)&&!ck;
+  if(!isDueMon&&!ck)return'<td class="stmt-cell"><div class="stmt-arrow">→</div></td>';
+  return'<td class="stmt-cell"><button class="stmt-tick'+(ck?' checked':'')+(du?' due':'')+'" onclick="toggleStmt(\''+a.id+'\',\''+c+'\')">'+(ck?'✓':'')+'</button></td>';
+}
+function stmtRowHtml(a,cols){
+  var freq=a.frequencyMonths||1;
+  var dayCell=ordinal(a.dueDay)+(freq>1?'<br><span style="font-size:0.65rem;color:var(--muted)">every '+freq+'m</span>':'');
+  var cells=cols.map(function(c){return stmtCellHtml(a,c);}).join('');
+  return'<tr>'
+    +'<td class="stmt-acct">'+escHtml(a.name)+'</td>'
+    +'<td class="stmt-day">'+dayCell+'</td>'
+    +cells
+    +'<td style="position:relative">'
+    +'<button class="opts-btn" onclick="toggleOptsMenu(\'stmt-'+a.id+'\',event)">⋮</button>'
+    +'<div class="opts-menu" id="opts-stmt-'+a.id+'" style="right:0;top:1.8rem">'
+    +'<button onclick="openEditAcctModal(\''+a.id+'\')">✏️ Edit</button>'
+    +'<button class="danger-opt" onclick="deleteAcct(\''+a.id+'\')">🗑 Delete</button>'
+    +'</div></td></tr>';
+}
+function renderStatements(){
+  var mc=el('main-content');
+  var cols=getMonthCols();var nowYM=realToday().slice(0,7);
+  var accounts=[].concat(data.statements.accounts).sort(function(a,b){return a.dueDay-b.dueDay;});
+  var due=accounts.filter(function(a){return isStmtDue(a,nowYM)&&!data.statements.months[a.id+'_'+nowYM];});
+  var colHeaders=cols.map(function(c){return'<th class="stmt-cell"'+(c===nowYM?' style="color:var(--module-color)"':'')+'>'+monthLabel(c)+'</th>';}).join('');
+  var banner='';
+  if(due.length){banner='<div class="due-banner"><div class="due-banner-title">⚠ Statements to check</div>'+due.map(function(a){return'<div style="font-size:0.83rem">'+escHtml(a.name)+'</div>';}).join('')+'</div>';}
+  var rows=accounts.length===0?'<tr><td colspan="'+(cols.length+3)+'" class="empty-state">No accounts yet.</td></tr>':accounts.map(function(a){return stmtRowHtml(a,cols);}).join('');
+  mc.innerHTML=banner
+    +'<div class="stmt-wrap"><table class="stmt-table">'
+    +'<thead><tr><th>Account</th><th>Due</th>'+colHeaders+'<th></th></tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div>'
+    +'<div style="margin-top:1rem;text-align:center"><button class="add-btn" onclick="openAddAcctModal()">+ Add account</button></div>';
+}
+function toggleStmt(aid,ym){
+  var k=aid+'_'+ym;
+  if(data.statements.months[k])delete data.statements.months[k];else data.statements.months[k]=realToday();
+  saveToDropbox();renderStatements();
 }
 let acctModalEditId=null;
 function openAddAcctModal(){
@@ -665,10 +664,10 @@ function openAddAcctModal(){
   el('am-anchor-row').style.display='none';
   el('am-save-btn').textContent='Add';
   el('acct-modal').classList.add('open');
-  setTimeout(()=>el('am-name').focus(),100);
+  setTimeout(function(){el('am-name').focus();},100);
 }
 function openEditAcctModal(id){
-  const a=data.statements.accounts.find(x=>x.id===id);if(!a)return;
+  var a=data.statements.accounts.find(function(x){return x.id===id;});if(!a)return;
   acctModalEditId=id;
   el('acct-modal-title').textContent='Edit account';
   el('am-name').value=a.name;
@@ -678,26 +677,27 @@ function openEditAcctModal(id){
   el('am-anchor-row').style.display=(a.frequencyMonths||1)>1?'block':'none';
   el('am-save-btn').textContent='Save';
   el('acct-modal').classList.add('open');
-  setTimeout(()=>el('am-name').focus(),100);
+  setTimeout(function(){el('am-name').focus();},100);
 }
 function closeAcctModal(){el('acct-modal').classList.remove('open');acctModalEditId=null;}
 function amFreqChanged(){
-  const freq=parseInt(el('am-freq').value)||1;
+  var freq=parseInt(el('am-freq').value)||1;
   el('am-anchor-row').style.display=freq>1?'block':'none';
 }
 function saveAcctModal(){
-  const name=el('am-name').value.trim();
-  const day=parseInt(el('am-day').value);
-  const freq=parseInt(el('am-freq').value)||1;
-  const anchor=parseInt(el('am-anchor').value)||1;
+  var name=el('am-name').value.trim();
+  var day=parseInt(el('am-day').value);
+  var freq=parseInt(el('am-freq').value)||1;
+  var anchor=parseInt(el('am-anchor').value)||1;
   if(!name||!day||day<1||day>28){showToast('Enter a name and day (1–28)');return;}
   if(freq<1||freq>12){showToast('Frequency must be 1–12 months');return;}
   if(acctModalEditId){
-    const a=data.statements.accounts.find(x=>x.id===acctModalEditId);if(!a)return;
-    a.name=name;a.dueDay=day;a.frequencyMonths=freq;if(freq>1)a.anchorMonth=anchor;else delete a.anchorMonth;
+    var a=data.statements.accounts.find(function(x){return x.id===acctModalEditId;});if(!a)return;
+    a.name=name;a.dueDay=day;a.frequencyMonths=freq;
+    if(freq>1)a.anchorMonth=anchor;else delete a.anchorMonth;
     showToast('Account updated ✓');
   }else{
-    const acct={id:uid(),name,dueDay:day,frequencyMonths:freq};
+    var acct={id:uid(),name:name,dueDay:day,frequencyMonths:freq};
     if(freq>1)acct.anchorMonth=anchor;
     data.statements.accounts.push(acct);
     showToast('Account added ✓');
@@ -706,14 +706,11 @@ function saveAcctModal(){
 }
 function deleteAcct(id){
   if(!confirm('Delete this account and all its statement records?'))return;
-  data.statements.accounts=data.statements.accounts.filter(x=>x.id!==id);
-  Object.keys(data.statements.months).forEach(k=>{if(k.startsWith(id))delete data.statements.months[k];});
+  data.statements.accounts=data.statements.accounts.filter(function(x){return x.id!==id;});
+  Object.keys(data.statements.months).forEach(function(k){if(k.startsWith(id))delete data.statements.months[k];});
   saveToDropbox();renderStatements();
 }
-  const k=`${aid}_${ym}`;
-  if(data.statements.months[k])delete data.statements.months[k];else data.statements.months[k]=realToday();
-  saveToDropbox();renderStatements();
-}
+
 // JOURNAL
 const prompts=['What made you smile today?','What went better than expected?','Who or what are you grateful for today?','What\'s one small win from today?','What moment would you save from today?','What are you looking forward to tomorrow?','What did you do today that you\'re proud of?'];
 
