@@ -247,6 +247,8 @@ input[type="date"]{color-scheme:dark;}
 .pr-rejected-name{font-size:0.82rem;word-break:break-word;}
 .pr-rejected-path{font-size:0.68rem;color:var(--muted);margin-top:0.1rem;word-break:break-word;}
 .home-tile[data-nav="photoreview"] .home-tile-accent{background:#0d9488;}
+.pr-debug-banner{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.35);border-radius:var(--radius);padding:0.75rem 0.9rem;margin-bottom:0.75rem;font-size:0.78rem;line-height:1.5;color:var(--text);word-break:break-word;}
+.pr-debug-actions{display:flex;gap:0.5rem;margin-top:0.5rem;}
 </style>
 </head>
 <body>
@@ -317,7 +319,7 @@ let data={
 let accessToken=null,currentTab='home',currentBucket='today';
 let currentWatchFilter='all',weightChart=null;
 let editingTaskId=null,editingEntryDate=null,longPressTimer=null;
-let prState={path:null,entries:[],loading:false,view:'browse',openIdx:-1,compareSel:[],thumbCache:{},fullUrl:null};
+let prState={path:null,entries:[],loading:false,view:'browse',openIdx:-1,compareSel:[],thumbCache:{},fullUrl:null,debugMsg:null};
 
 function el(id){return document.getElementById(id);}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
@@ -988,7 +990,7 @@ function renderPhotoReview(){
   else renderPRBrowse();
 }
 async function prListFolder(path){
-  prState.loading=true;prState.view='browse';renderPhotoReview();
+  prState.loading=true;prState.view='browse';prState.debugMsg=null;renderPhotoReview();
   try{
     const res=await fetch('https://api.dropboxapi.com/2/files/list_folder',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({path,recursive:false,include_media_info:false})});
     if(!res.ok){const errBody=await res.text();throw new Error(errBody);}
@@ -998,19 +1000,31 @@ async function prListFolder(path){
       const r2=await fetch('https://api.dropboxapi.com/2/files/list_folder/continue',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({cursor})});
       const j2=await r2.json();entries=entries.concat(j2.entries||[]);cursor=j2.cursor;hasMore=j2.has_more;
     }
+    const rawCount=entries.length;
     entries=entries.filter(e=>e['.tag']==='folder'||(e['.tag']==='file'&&(prIsImage(e.name)||prIsVideo(e.name))));
+    if(rawCount>0&&entries.length===0){
+      const sampleNames=(json.entries||[]).slice(0,3).map(x=>x.name).join(', ');
+      prState.debugMsg=`Dropbox returned ${rawCount} item(s) for "${path}", but 0 matched known photo/video types. Sample names: ${sampleNames}`;
+    }else if(rawCount===0){
+      prState.debugMsg=`Dropbox returned 0 items for "${path}" (folder exists but is empty, or path is wrong).`;
+    }
     entries.sort((a,b)=>a['.tag']!==b['.tag']?(a['.tag']==='folder'?-1:1):a.name.localeCompare(b.name));
     prState.entries=entries;prState.path=path;localStorage.setItem('pr_last_folder',path);
   }catch(e){
     console.error('Photo Review list_folder error:',e);
     let msg=e&&e.message?e.message:String(e);
     try{const parsed=JSON.parse(msg);if(parsed.error_summary)msg=parsed.error_summary;}catch(_){}
-    if(msg.length>80)msg=msg.slice(0,80)+'…';
-    showToast('Error: '+msg);
+    prState.debugMsg=`Error loading "${path}": ${msg}`;
     prState.entries=[];prState.path=path;
   }
   prState.loading=false;renderPhotoReview();
 }
+function prCopyDebug(){
+  if(!prState.debugMsg)return;
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(prState.debugMsg).then(()=>showToast('Copied ✓')).catch(()=>showToast('Could not copy'));
+  else showToast('Clipboard not available — select text manually');
+}
+function prDismissDebug(){prState.debugMsg=null;renderPhotoReview();}
 async function prGetThumb(path){
   if(prState.thumbCache[path])return prState.thumbCache[path];
   try{
@@ -1047,6 +1061,7 @@ function renderPRBrowse(){
 <button class="pr-shortcut-btn" onclick="prState.view='rejected';renderPhotoReview()">🚫 Review folder (${data.photoReview.rejected.length})</button>
 </div>
 <div class="pr-crumbs">${crumbs.map((c,i)=>`<span class="pr-crumb" onclick="prListFolder('${escHtml(c.path)}')">${escHtml(c.label)}</span>${i<crumbs.length-1?'<span>/</span>':''}`).join('')}</div>
+${prState.debugMsg?`<div class="pr-debug-banner"><div>${escHtml(prState.debugMsg)}</div><div class="pr-debug-actions"><button class="add-btn secondary" onclick="prCopyDebug()">📋 Copy</button><button class="add-btn secondary" onclick="prDismissDebug()">✕ Dismiss</button></div></div>`:''}
 ${prState.loading?`<div class="empty-state">Loading…</div>`:''}
 ${!prState.loading&&folders.length===0&&media.length===0?`<div class="empty-state">No folders or photos here.</div>`:''}
 ${folders.length?`<div class="card">${folders.map(f=>`<div class="pr-folder-row" onclick="prListFolder('${escHtml(f.path_lower)}')"><span class="pr-folder-icon">📁</span><span>${escHtml(f.name)}</span></div>`).join('')}</div>`:''}
