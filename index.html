@@ -255,6 +255,7 @@ input[type="date"]{color-scheme:dark;}
 <div class="modal">
 <h3 id="edit-modal-title">Edit task</h3>
 <input class="add-input" id="edit-task-input" placeholder="Task text…" />
+<input class="add-input" id="edit-acct-day" type="number" min="1" max="28" placeholder="Statement day (1–28)" style="margin-top:0.5rem;display:none" />
 <div class="modal-btns">
 <button class="add-btn secondary" onclick="closeEditModal()">Cancel</button>
 <button class="add-btn" onclick="saveEditTask()">Save</button>
@@ -490,10 +491,14 @@ function openEditModal(id){
   el('edit-modal').classList.add('open');
   setTimeout(()=>el('edit-task-input').focus(),100);
 }
-function closeEditModal(){el('edit-modal').classList.remove('open');editingTaskId=null;editingEntryDate=null;}
+function closeEditModal(){el('edit-modal').classList.remove('open');editingTaskId=null;editingEntryDate=null;el('edit-acct-day').style.display='none';el('edit-acct-day').value='';}
 function saveEditTask(){
   const text=el('edit-task-input').value.trim();if(!text)return;
-  if(editingTaskId){
+  if(editingTaskId&&editingTaskId.startsWith('acct:')){
+    const id=editingTaskId.slice(5);
+    saveEditAcct(id,text,el('edit-acct-day').value);
+    showToast('Account updated ✓');
+  }else if(editingTaskId){
     const t=data.tasks.find(x=>x.id===editingTaskId);
     if(t){t.text=text;saveToDropbox();renderTodo();showToast('Task updated ✓');}
   }else if(editingEntryDate){
@@ -594,7 +599,13 @@ ${accounts.map(a=>`
 <td class="stmt-acct">${escHtml(a.name)}</td>
 <td class="stmt-day">${ordinal(a.dueDay)}</td>
 ${cols.map(c=>{const k=`${a.id}_${c}`;const ck=!!data.statements.months[k];const du=isStmtDue(a,c)&&!ck;return`<td class="stmt-cell"><button class="stmt-tick${ck?' checked':''}${du?' due':''}" onclick="toggleStmt('${a.id}','${c}')">${ck?'✓':''}</button></td>`;}).join('')}
-<td><button class="del-btn" onclick="deleteAcct('${a.id}')">✕</button></td>
+<td style="position:relative">
+<button class="opts-btn" onclick="toggleOptsMenu('stmt-${a.id}',event)">⋮</button>
+<div class="opts-menu" id="opts-stmt-${a.id}" style="right:0;top:1.8rem">
+<button onclick="openEditAcctModal('${a.id}')">✏️ Edit</button>
+<button class="danger-opt" onclick="deleteAcct('${a.id}')">🗑 Delete</button>
+</div>
+</td>
 </tr>`).join('')}
 </tbody>
 </table>
@@ -624,6 +635,21 @@ function deleteAcct(id){
   Object.keys(data.statements.months).forEach(k=>{if(k.startsWith(id))delete data.statements.months[k];});
   saveToDropbox();renderStatements();
 }
+function openEditAcctModal(id){
+  const a=data.statements.accounts.find(x=>x.id===id);if(!a)return;
+  editingTaskId='acct:'+id;editingEntryDate=null;
+  el('edit-modal-title').textContent='Edit account';
+  el('edit-task-input').value=a.name;
+  const dayField=el('edit-acct-day');dayField.value=a.dueDay;dayField.style.display='block';
+  el('edit-modal').classList.add('open');
+  setTimeout(()=>el('edit-task-input').focus(),100);
+}
+function saveEditAcct(id,newName,newDay){
+  const a=data.statements.accounts.find(x=>x.id===id);if(!a)return;
+  if(newName)a.name=newName;
+  const d=parseInt(newDay);if(d>=1&&d<=28)a.dueDay=d;
+  saveToDropbox();renderStatements();
+}
 
 // JOURNAL
 const prompts=['What made you smile today?','What went better than expected?','Who or what are you grateful for today?','What\'s one small win from today?','What moment would you save from today?','What are you looking forward to tomorrow?','What did you do today that you\'re proud of?'];
@@ -649,10 +675,10 @@ function getEditorPlainText(){
 function onJournalInput(){
   // Debounced-ish re-render preserving caret roughly at end (simple approach: rebuild on blur-safe events)
 }
-function renderPastLines(text){
+function renderPastLines(text,startIdx){
   const lines=text.split('\n').filter(l=>l.trim());
   return lines.map((line,i)=>{
-    const color=RAINBOW_COLORS[i%RAINBOW_COLORS.length];
+    const color=RAINBOW_COLORS[(startIdx+i)%RAINBOW_COLORS.length];
     return `<div class="past-line"><span class="j-dot" style="background:${color}"></span><span>${escHtml(line)}</span></div>`;
   }).join('');
 }
@@ -683,11 +709,7 @@ function renderJournal(){
 ${past.length?`
 <div class="section-title">Previous entries</div>
 <div class="card">
-${past.map(e=>`
-<div class="past-entry" onpointerdown="startLongPress('${e.date}')" onpointerup="cancelLongPress()" onpointerleave="cancelLongPress()">
-<div class="past-date">${fmtDate(e.date)}</div>
-${renderPastLines(e.text)}
-</div>`).join('')}
+${(()=>{let ci=0;return past.map(e=>{const lines=e.text.split('\n').filter(l=>l.trim());const html=renderPastLines(e.text,ci);ci=(ci+lines.length)%RAINBOW_COLORS.length;return`<div class="past-entry" onpointerdown="startLongPress('${e.date}')" onpointerup="cancelLongPress()" onpointerleave="cancelLongPress()"><div class="past-date">${fmtDate(e.date)}</div>${html}</div>`;}).join('');})()}
 </div>`:''}`;
 
   // Set up the editor to maintain line-based bullets
@@ -871,17 +893,19 @@ function drawWeightChartInner(entries){
   if(data.weight.heightCm){
     const h=data.weight.heightCm/100;
     const bands=[
-      {label:'Underweight',max:18.5,color:'rgba(96,165,250,0.08)'},
-      {label:'Healthy',min:18.5,max:25,color:'rgba(74,222,128,0.08)'},
-      {label:'Overweight',min:25,max:30,color:'rgba(251,191,36,0.08)'},
-      {label:'Obese',min:30,color:'rgba(248,113,113,0.08)'}
+      {label:'Underweight',max:18.5,color:'rgba(96,165,250,0.18)'},
+      {label:'Healthy',min:18.5,max:25,color:'rgba(74,222,128,0.18)'},
+      {label:'Overweight',min:25,max:30,color:'rgba(251,191,36,0.2)'},
+      {label:'Obese',min:30,color:'rgba(248,113,113,0.2)'}
     ];
     bands.forEach(b=>{
-      const maxKg=b.max?b.max*h*h:Math.max(...vals)*1.1;
+      const maxKg=b.max?b.max*h*h:Math.max(...vals,100)*1.05;
       datasets.push({label:b.label,data:Array(vals.length).fill(maxKg),borderColor:'transparent',backgroundColor:b.color,fill:b.min?'-1':'origin',pointRadius:0,tension:0});
     });
   }
-  weightChart=new Chart(canvas,{type:'line',data:{labels,datasets},options:{responsive:true,plugins:{legend:{labels:{color:muted,font:{size:10},filter:i=>!['Underweight','Healthy','Overweight','Obese'].includes(i.text)}}},scales:{x:{ticks:{color:muted,font:{size:10}},grid:{color:border}},y:{ticks:{color:muted,font:{size:10}},grid:{color:border}}}}});
+  const minVal=Math.min(...vals);const maxVal=Math.max(...vals);
+  const yMin=Math.min(75,minVal-2);const yMax=Math.max(100,maxVal+2);
+  weightChart=new Chart(canvas,{type:'line',data:{labels,datasets},options:{responsive:true,plugins:{legend:{labels:{color:muted,font:{size:10},filter:i=>!['Underweight','Healthy','Overweight','Obese'].includes(i.text)}}},scales:{x:{ticks:{color:muted,font:{size:10}},grid:{color:border}},y:{min:yMin,max:yMax,ticks:{color:muted,font:{size:10}},grid:{color:border}}}}});
 }
 function addWeight(){
   const val=parseFloat(el('weight-val').value);const d=el('weight-date').value;
