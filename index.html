@@ -211,6 +211,42 @@ select option{background:var(--card);}
 input[type="checkbox"]{accent-color:var(--module-color);}
 input[type="date"]{color-scheme:dark;}
 [data-theme="light"] input[type="date"],[data-theme="rainbow"] input[type="date"],[data-theme="spectrum"] input[type="date"]{color-scheme:light;}
+.pr-shortcuts{display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;}
+.pr-shortcut-btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:0.45rem 0.8rem;border-radius:var(--radius-sm);font-size:0.78rem;font-family:var(--font);cursor:pointer;}
+.pr-shortcut-btn:hover{border-color:var(--module-color);}
+.pr-crumbs{display:flex;flex-wrap:wrap;gap:0.25rem;font-size:0.76rem;color:var(--muted);margin-bottom:0.75rem;}
+.pr-crumb{cursor:pointer;color:var(--module-color);}
+.pr-crumb:hover{text-decoration:underline;}
+.pr-folder-row{display:flex;align-items:center;gap:0.6rem;padding:0.6rem 0;border-bottom:1px solid var(--border);cursor:pointer;}
+.pr-folder-row:last-child{border-bottom:none;}
+.pr-folder-icon{font-size:1.1rem;}
+.pr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0.4rem;margin-top:0.5rem;}
+.pr-thumb{position:relative;aspect-ratio:1;background:var(--surface);border-radius:var(--radius-sm);overflow:hidden;cursor:pointer;border:1px solid var(--border);}
+.pr-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.pr-need-thumb{width:100%;height:100%;}
+.pr-thumb-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.3rem;}
+.pr-vid-badge{position:absolute;bottom:3px;right:3px;background:rgba(0,0,0,0.65);color:#fff;font-size:0.6rem;padding:0.1rem 0.35rem;border-radius:4px;}
+.pr-viewer{display:flex;flex-direction:column;gap:0.6rem;}
+.pr-viewer-stage{background:#000;border-radius:var(--radius);overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:220px;position:relative;}
+.pr-load-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.6rem;background:rgba(0,0,0,0.5);color:#fff;text-align:center;padding:1rem;}
+.pr-play-btn{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.9);border:none;font-size:1.4rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.pr-viewer-controls{display:flex;justify-content:space-between;align-items:center;gap:0.4rem;}
+.pr-nav-btn{background:var(--card);border:1px solid var(--border);color:var(--text);width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:1rem;flex-shrink:0;}
+.pr-nav-btn:disabled{opacity:0.3;}
+.pr-action-row{display:flex;gap:0.5rem;flex:1;justify-content:center;flex-wrap:wrap;}
+.pr-filmstrip{display:flex;gap:0.4rem;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:0.3rem;}
+.pr-film-thumb{flex-shrink:0;width:56px;height:56px;border-radius:6px;overflow:hidden;border:2px solid transparent;cursor:pointer;background:var(--surface);}
+.pr-film-thumb.active{border-color:var(--module-color);}
+.pr-film-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.pr-compare-wrap{display:flex;gap:0.4rem;}
+.pr-compare-wrap.stacked{flex-direction:column;}
+.pr-compare-pane{flex:1;background:#000;border-radius:var(--radius-sm);overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:140px;}
+.pr-compare-pane img{max-width:100%;max-height:45vh;display:block;}
+.pr-rejected-item{display:flex;align-items:center;gap:0.6rem;padding:0.6rem 0;border-bottom:1px solid var(--border);}
+.pr-rejected-item:last-child{border-bottom:none;}
+.pr-rejected-name{font-size:0.82rem;word-break:break-word;}
+.pr-rejected-path{font-size:0.68rem;color:var(--muted);margin-top:0.1rem;word-break:break-word;}
+.home-tile[data-nav="photoreview"] .home-tile-accent{background:#0d9488;}
 </style>
 </head>
 <body>
@@ -248,6 +284,7 @@ input[type="date"]{color-scheme:dark;}
 <button class="menu-item" onclick="navTo('journal')"><span class="menu-item-icon">✨</span>Journal</button>
 <button class="menu-item" onclick="navTo('watchlist')"><span class="menu-item-icon">🎬</span>Watch list</button>
 <button class="menu-item" onclick="navTo('weight')"><span class="menu-item-icon">⚖️</span>Weight</button>
+<button class="menu-item" onclick="navTo('photoreview')"><span class="menu-item-icon">📷</span>Photo Review</button>
 <div class="menu-divider"></div>
 <button class="menu-item" onclick="navTo('settings')"><span class="menu-item-icon">⚙️</span>Settings</button>
 </div>
@@ -274,11 +311,13 @@ let data={
   journal:[],watchlist:[],
   weight:{entries:[],target:null,heightCm:null},
   shopping:[],
+  photoReview:{rejected:[]},
   settings:{journalBoundaryHour:0,bioEnabled:false}
 };
 let accessToken=null,currentTab='home',currentBucket='today';
 let currentWatchFilter='all',weightChart=null;
 let editingTaskId=null,editingEntryDate=null,longPressTimer=null;
+let prState={path:null,entries:[],loading:false,view:'browse',openIdx:-1,compareSel:[],thumbCache:{},fullUrl:null};
 
 function el(id){return document.getElementById(id);}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
@@ -314,6 +353,7 @@ async function loadFromDropbox(){
     ['tasks','birthdays','journal','watchlist','shopping'].forEach(k=>{if(json[k])data[k]=json[k];});
     if(json.statements)data.statements=json.statements;
     if(json.weight)data.weight={...data.weight,...json.weight};
+    if(json.photoReview)data.photoReview=json.photoReview;
     if(json.settings)data.settings={...data.settings,...json.settings};
     localStorage.setItem('dbx_cache',JSON.stringify(data));
   }catch(e){
@@ -366,8 +406,8 @@ function setTheme(t){
 function setModuleAttr(tab){document.documentElement.setAttribute('data-module',tab);}
 
 // TABS
-const tabTitles={home:"Phill's Admin",todo:'To Do',birthdays:'Birthdays',statements:'Statements',journal:'Journal',watchlist:'Watch list',weight:'Weight',shopping:'Shopping',settings:'Settings'};
-const tabIcons={home:'🏠',todo:'✅',birthdays:'🎂',statements:'🏦',journal:'✨',watchlist:'🎬',weight:'⚖️',shopping:'🛒',settings:'⚙️'};
+const tabTitles={home:"Phill's Admin",todo:'To Do',birthdays:'Birthdays',statements:'Statements',journal:'Journal',watchlist:'Watch list',weight:'Weight',shopping:'Shopping',photoreview:'Photo Review',settings:'Settings'};
+const tabIcons={home:'🏠',todo:'✅',birthdays:'🎂',statements:'🏦',journal:'✨',watchlist:'🎬',weight:'⚖️',shopping:'🛒',photoreview:'📷',settings:'⚙️'};
 function showTab(tab){
   currentTab=tab;setModuleAttr(tab);
   document.querySelectorAll('.menu-item').forEach(b=>b.classList.remove('active'));
@@ -385,6 +425,7 @@ function renderTab(){
   else if(currentTab==='watchlist')renderWatchlist();
   else if(currentTab==='weight')renderWeight();
   else if(currentTab==='shopping')renderShopping();
+  else if(currentTab==='photoreview')renderPhotoReviewTab();
   else if(currentTab==='settings')renderSettings();
 }
 
@@ -413,6 +454,7 @@ function renderHome(){
 <div class="home-tile" onclick="showTab('journal')" data-nav="journal"><div class="home-tile-accent"></div><div class="home-tile-icon">✨</div><div class="home-tile-name">Journal</div><div class="home-tile-summary">${data.journal.find(e=>e.date===todayStr())?'Entry logged today':'Nothing logged yet today'}</div></div>
 <div class="home-tile" onclick="showTab('watchlist')" data-nav="watchlist"><div class="home-tile-accent"></div><div class="home-tile-icon">🎬</div><div class="home-tile-name">Watch list</div><div class="home-tile-summary">${unwatched===0?'All watched':`${unwatched} to watch`}</div></div>
 <div class="home-tile" onclick="showTab('weight')" data-nav="weight" style="grid-column:span 2"><div class="home-tile-accent"></div><div class="home-tile-icon">⚖️</div><div class="home-tile-name">Weight</div><div class="home-tile-summary">${latestW?`Last: ${latestW.kg} kg on ${fmtDate(latestW.date)}`:'No entries yet'}</div></div>
+<div class="home-tile" onclick="showTab('photoreview')" data-nav="photoreview" style="grid-column:span 2"><div class="home-tile-accent"></div><div class="home-tile-icon">📷</div><div class="home-tile-name">Photo Review</div><div class="home-tile-summary">${data.photoReview.rejected.length?`${data.photoReview.rejected.length} in review folder`:'Browse & review photos'}</div></div>
 </div>`;
 }
 
@@ -919,6 +961,193 @@ function toggleShop(id){const s=data.shopping.find(x=>x.id===id);if(s){s.done=!s
 function deleteShop(id){data.shopping=data.shopping.filter(x=>x.id!==id);saveToDropbox();renderShopping();}
 function clearShopDone(){data.shopping=data.shopping.filter(s=>!s.done);saveToDropbox();renderShopping();showToast('Cleared ✓');}
 
+// PHOTO REVIEW
+const PR_IMG_EXT=['jpg','jpeg','png','gif','heic','heif','webp','bmp','tiff','tif'];
+const PR_VID_EXT=['mp4','mov','avi','mkv','3gp','m4v','wmv'];
+const PR_REJECT_FOLDER='/Pictures/PhillsAdmin PicReview';
+function prExt(name){return (name.split('.').pop()||'').toLowerCase();}
+function prIsImage(name){return PR_IMG_EXT.includes(prExt(name));}
+function prIsVideo(name){return PR_VID_EXT.includes(prExt(name));}
+function prFmtSize(bytes){if(!bytes&&bytes!==0)return'';const mb=bytes/1048576;return mb>=1?mb.toFixed(1)+' MB':(bytes/1024).toFixed(0)+' KB';}
+function prIsWifi(){const c=navigator.connection||navigator.mozConnection||navigator.webkitConnection;if(c&&c.type)return c.type==='wifi';return null;}
+function prMediaEntries(){return prState.entries.filter(e=>e['.tag']==='file');}
+function prBreadcrumbs(path){
+  if(!path)return[{label:'Dropbox',path:''}];
+  const parts=path.split('/').filter(Boolean);const crumbs=[{label:'Dropbox',path:''}];let cur='';
+  parts.forEach(p=>{cur+='/'+p;crumbs.push({label:p,path:cur});});
+  return crumbs;
+}
+function renderPhotoReviewTab(){
+  if(prState.path===null)prListFolder(localStorage.getItem('pr_last_folder')||'/Pictures - Newer');
+  else renderPhotoReview();
+}
+function renderPhotoReview(){
+  if(prState.view==='viewer')renderPRViewer();
+  else if(prState.view==='compare')renderPRCompare();
+  else if(prState.view==='rejected')renderPRRejected();
+  else renderPRBrowse();
+}
+async function prListFolder(path){
+  prState.loading=true;prState.view='browse';renderPhotoReview();
+  try{
+    const res=await fetch('https://api.dropboxapi.com/2/files/list_folder',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({path,recursive:false,include_media_info:false})});
+    if(!res.ok){const errBody=await res.text();throw new Error(errBody);}
+    const json=await res.json();
+    let entries=json.entries||[];let cursor=json.cursor,hasMore=json.has_more;
+    while(hasMore){
+      const r2=await fetch('https://api.dropboxapi.com/2/files/list_folder/continue',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({cursor})});
+      const j2=await r2.json();entries=entries.concat(j2.entries||[]);cursor=j2.cursor;hasMore=j2.has_more;
+    }
+    entries=entries.filter(e=>e['.tag']==='folder'||(e['.tag']==='file'&&(prIsImage(e.name)||prIsVideo(e.name))));
+    entries.sort((a,b)=>a['.tag']!==b['.tag']?(a['.tag']==='folder'?-1:1):a.name.localeCompare(b.name));
+    prState.entries=entries;prState.path=path;localStorage.setItem('pr_last_folder',path);
+  }catch(e){showToast('Could not load that folder');prState.entries=[];prState.path=path;}
+  prState.loading=false;renderPhotoReview();
+}
+async function prGetThumb(path){
+  if(prState.thumbCache[path])return prState.thumbCache[path];
+  try{
+    const res=await fetch('https://content.dropboxapi.com/2/files/get_thumbnail_v2',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({resource:{'.tag':'path',path},format:'jpeg',size:'w128h128',mode:'strict'})});
+    if(!res.ok)throw new Error('no thumb');
+    const blob=await res.blob();const url=URL.createObjectURL(blob);prState.thumbCache[path]=url;return url;
+  }catch(e){return null;}
+}
+function prHydrateThumbs(){
+  document.querySelectorAll('.pr-need-thumb').forEach(node=>{
+    const path=node.getAttribute('data-path');
+    prGetThumb(path).then(url=>{
+      if(!node.isConnected)return;
+      node.innerHTML=url?`<img src="${url}" />`:`<div class="pr-thumb-placeholder">🖼️</div>`;
+    });
+  });
+}
+async function prGetTempLink(path){
+  try{
+    const res=await fetch('https://api.dropboxapi.com/2/files/get_temporary_link',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({path})});
+    const json=await res.json();return json.link||null;
+  }catch(e){return null;}
+}
+function renderPRBrowse(){
+  const mc=el('main-content');
+  const folders=prState.entries.filter(e=>e['.tag']==='folder');
+  const media=prMediaEntries();
+  const crumbs=prBreadcrumbs(prState.path);
+  mc.innerHTML=`
+<div class="pr-shortcuts">
+<button class="pr-shortcut-btn" onclick="prListFolder('/Pictures - Newer')">📁 Pictures - Newer</button>
+<button class="pr-shortcut-btn" onclick="prListFolder('/Pictures - Older')">📁 Pictures - Older</button>
+<button class="pr-shortcut-btn" onclick="prListFolder('')">🏠 Dropbox root</button>
+<button class="pr-shortcut-btn" onclick="prState.view='rejected';renderPhotoReview()">🚫 Review folder (${data.photoReview.rejected.length})</button>
+</div>
+<div class="pr-crumbs">${crumbs.map((c,i)=>`<span class="pr-crumb" onclick="prListFolder('${escHtml(c.path)}')">${escHtml(c.label)}</span>${i<crumbs.length-1?'<span>/</span>':''}`).join('')}</div>
+${prState.loading?`<div class="empty-state">Loading…</div>`:''}
+${!prState.loading&&folders.length===0&&media.length===0?`<div class="empty-state">No folders or photos here.</div>`:''}
+${folders.length?`<div class="card">${folders.map(f=>`<div class="pr-folder-row" onclick="prListFolder('${escHtml(f.path_lower)}')"><span class="pr-folder-icon">📁</span><span>${escHtml(f.name)}</span></div>`).join('')}</div>`:''}
+${media.length?`<div class="pr-grid">${media.map((m,i)=>`
+<div class="pr-thumb" onclick="prOpenViewer(${i})">
+<div class="pr-need-thumb" data-path="${escHtml(m.path_lower)}"><div class="pr-thumb-placeholder">${prIsVideo(m.name)?'🎬':'🖼️'}</div></div>
+${prIsVideo(m.name)?`<div class="pr-vid-badge">🎬 ${prFmtSize(m.size)}</div>`:''}
+</div>`).join('')}</div>`:''}`;
+  prHydrateThumbs();
+}
+function prOpenViewer(idx){prState.openIdx=idx;prState.view='viewer';prState.fullUrl=null;renderPhotoReview();}
+function prCloseViewer(){prState.view='browse';prState.openIdx=-1;prState.fullUrl=null;renderPhotoReview();}
+function prNav(delta){
+  const media=prMediaEntries();const i=prState.openIdx+delta;
+  if(i<0||i>=media.length)return;
+  prState.openIdx=i;prState.fullUrl=null;renderPRViewer();
+}
+function renderPRViewer(){
+  const media=prMediaEntries();const item=media[prState.openIdx];
+  if(!item){prCloseViewer();return;}
+  const isVid=prIsVideo(item.name);
+  const mc=el('main-content');
+  mc.innerHTML=`
+<div class="pr-viewer">
+<div class="pr-toolbar"><button class="add-btn secondary" onclick="prCloseViewer()">← Back</button><div style="flex:1;font-size:0.78rem;color:var(--muted);text-align:right;word-break:break-word">${escHtml(item.name)}</div></div>
+<div class="pr-viewer-stage">
+${prState.fullUrl?(isVid?`<video src="${prState.fullUrl}" controls autoplay playsinline style="max-width:100%;max-height:70vh"></video>`:`<img src="${prState.fullUrl}" style="max-width:100%;max-height:70vh" />`):`
+<div class="pr-need-thumb" data-path="${escHtml(item.path_lower)}" style="position:absolute;inset:0"><div class="pr-thumb-placeholder">${isVid?'🎬':'🖼️'}</div></div>
+<div class="pr-load-overlay">${isVid?`<button class="pr-play-btn" onclick="prLoadFull()">▶</button><div>${prFmtSize(item.size)}</div>`:`<button class="add-btn" onclick="prLoadFull()">📥 Load full-res photo</button><div style="font-size:0.7rem">${prFmtSize(item.size)}</div>`}</div>`}
+</div>
+<div class="pr-viewer-controls">
+<button class="pr-nav-btn" onclick="prNav(-1)" ${prState.openIdx<=0?'disabled':''}>‹</button>
+<div class="pr-action-row">
+<button class="add-btn secondary" onclick="prToggleCompareSel('${item.id}')">${prState.compareSel.includes(item.id)?'✓ Selected':'⚖ Compare'}</button>
+<button class="add-btn danger" onclick="prReject()">🚫 Reject</button>
+</div>
+<button class="pr-nav-btn" onclick="prNav(1)" ${prState.openIdx>=media.length-1?'disabled':''}>›</button>
+</div>
+${prState.compareSel.length===2?`<button class="add-btn" style="width:100%" onclick="prOpenCompare()">⚖ Compare selected (2)</button>`:''}
+<div class="pr-filmstrip">${media.map((m,i)=>`<div class="pr-film-thumb${i===prState.openIdx?' active':''} pr-need-thumb" data-path="${escHtml(m.path_lower)}" onclick="prOpenViewer(${i})"></div>`).join('')}</div>
+</div>`;
+  prHydrateThumbs();
+  if(!prState.fullUrl&&!isVid&&prIsWifi()===true)prLoadFull();
+}
+async function prLoadFull(){
+  const media=prMediaEntries();const item=media[prState.openIdx];if(!item)return;
+  showToast('Loading…');
+  const url=await prGetTempLink(item.path_lower);
+  if(url){prState.fullUrl=url;renderPRViewer();}else showToast('Could not load full-res');
+}
+async function prReject(){
+  const media=prMediaEntries();const item=media[prState.openIdx];if(!item)return;
+  if(!confirm(`Reject "${item.name}"? It'll be moved to the review folder and can be restored later.`))return;
+  const dest=`${PR_REJECT_FOLDER}/${item.name}`;
+  try{
+    const res=await fetch('https://api.dropboxapi.com/2/files/move_v2',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({from_path:item.path_lower,to_path:dest,autorename:true})});
+    const json=await res.json();
+    const newPath=json.metadata?json.metadata.path_lower:dest.toLowerCase();
+    data.photoReview.rejected.push({id:uid(),name:item.name,originalPath:item.path_lower,rejectedPath:newPath,rejectedAt:realToday()});
+    saveToDropbox();showToast('Moved to review folder ✓');
+    prState.entries=prState.entries.filter(e=>e.id!==item.id);
+    prState.compareSel=prState.compareSel.filter(id=>id!==item.id);
+    const newMedia=prMediaEntries();
+    if(newMedia.length===0){prCloseViewer();}else{prState.openIdx=Math.min(prState.openIdx,newMedia.length-1);prState.fullUrl=null;renderPRViewer();}
+  }catch(e){showToast('Could not move file');}
+}
+function prToggleCompareSel(id){
+  const i=prState.compareSel.indexOf(id);
+  if(i>=0)prState.compareSel.splice(i,1);
+  else{if(prState.compareSel.length>=2)prState.compareSel.shift();prState.compareSel.push(id);}
+  renderPRViewer();
+}
+function prOpenCompare(){if(prState.compareSel.length!==2)return;prState.view='compare';renderPhotoReview();}
+function renderPRCompare(){
+  const media=prMediaEntries();
+  const items=prState.compareSel.map(id=>media.find(m=>m.id===id)).filter(Boolean);
+  if(items.length!==2){prState.view='viewer';renderPRViewer();return;}
+  const mc=el('main-content');
+  mc.innerHTML=`<div class="pr-toolbar"><button class="add-btn secondary" onclick="prState.view='viewer';renderPhotoReview()">← Back to photo</button></div>
+<div id="pr-compare-area" class="empty-state">Loading both photos…</div>`;
+  prLoadCompareImages(items);
+}
+async function prLoadCompareImages(items){
+  const urls=await Promise.all(items.map(it=>prGetTempLink(it.path_lower)));
+  const area=el('pr-compare-area');if(!area)return;
+  if(urls.includes(null)){area.textContent='Could not load one or both photos.';return;}
+  const dims=await Promise.all(urls.map(u=>new Promise(res=>{const img=new Image();img.onload=()=>res({w:img.naturalWidth,h:img.naturalHeight});img.onerror=()=>res({w:1,h:1});img.src=u;})));
+  const portrait=dims[0].h>dims[0].w;
+  area.outerHTML=`<div class="pr-compare-wrap${portrait?' stacked':''}" id="pr-compare-area">${urls.map(u=>`<div class="pr-compare-pane"><img src="${u}" /></div>`).join('')}</div>`;
+}
+function renderPRRejected(){
+  const mc=el('main-content');
+  const list=[...data.photoReview.rejected].sort((a,b)=>b.rejectedAt.localeCompare(a.rejectedAt));
+  mc.innerHTML=`<div class="pr-toolbar"><button class="add-btn secondary" onclick="prState.view='browse';renderPhotoReview()">← Back</button></div>
+<div class="card">
+${list.length===0?`<div class="empty-state">No rejected photos.</div>`:''}
+${list.map(r=>`<div class="pr-rejected-item"><div style="flex:1"><div class="pr-rejected-name">${escHtml(r.name)}</div><div class="pr-rejected-path">${escHtml(r.originalPath)}</div></div><button class="add-btn secondary" onclick="prRestore('${r.id}')">↺ Restore</button></div>`).join('')}
+</div>`;
+}
+async function prRestore(id){
+  const r=data.photoReview.rejected.find(x=>x.id===id);if(!r)return;
+  try{
+    await fetch('https://api.dropboxapi.com/2/files/move_v2',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({from_path:r.rejectedPath,to_path:r.originalPath,autorename:true})});
+    data.photoReview.rejected=data.photoReview.rejected.filter(x=>x.id!==id);
+    saveToDropbox();showToast('Restored ✓');renderPRRejected();
+  }catch(e){showToast('Could not restore — original location may no longer exist');}
+}
+
 // SETTINGS
 function renderSettings(){
   const mc=el('main-content');
@@ -982,6 +1211,7 @@ async function init(){
     ['tasks','birthdays','journal','watchlist','shopping'].forEach(k=>{if(p[k])data[k]=p[k];});
     if(p.statements)data.statements=p.statements;
     if(p.weight)data.weight={...data.weight,...p.weight};
+    if(p.photoReview)data.photoReview=p.photoReview;
     if(p.settings)data.settings={...data.settings,...p.settings};
   }catch(e){}
   const bioOn=data.settings.bioEnabled||localStorage.getItem('bio_enabled')==='1';
