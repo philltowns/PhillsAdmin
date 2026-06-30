@@ -210,6 +210,13 @@ canvas{width:100%!important;}
 select option{background:var(--card);}
 input[type="checkbox"]{accent-color:var(--module-color);}
 input[type="date"]{color-scheme:dark;}
+.stmt-arrow{color:var(--muted);font-size:0.8rem;display:flex;align-items:center;justify-content:center;height:26px;}
+.acct-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;display:none;align-items:center;justify-content:center;padding:1rem;}
+.acct-modal-overlay.open{display:flex;}
+.acct-modal{background:var(--card);border-radius:var(--radius);padding:1.25rem;width:100%;max-width:360px;display:flex;flex-direction:column;gap:0.75rem;}
+.acct-modal h3{margin:0;font-size:1rem;}
+.acct-modal label{font-size:0.72rem;color:var(--muted);display:block;margin-bottom:0.25rem;}
+.acct-modal-row{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;}
 [data-theme="light"] input[type="date"],[data-theme="rainbow"] input[type="date"],[data-theme="spectrum"] input[type="date"]{color-scheme:light;}
 </style>
 </head>
@@ -255,10 +262,30 @@ input[type="date"]{color-scheme:dark;}
 <div class="modal">
 <h3 id="edit-modal-title">Edit task</h3>
 <input class="add-input" id="edit-task-input" placeholder="Task text…" />
-<input class="add-input" id="edit-acct-day" type="number" min="1" max="28" placeholder="Statement day (1–28)" style="margin-top:0.5rem;display:none" />
 <div class="modal-btns">
 <button class="add-btn secondary" onclick="closeEditModal()">Cancel</button>
 <button class="add-btn" onclick="saveEditTask()">Save</button>
+</div>
+</div>
+</div>
+<div class="acct-modal-overlay" id="acct-modal">
+<div class="acct-modal">
+<h3 id="acct-modal-title">Add account</h3>
+<div><label>Account name</label><input class="add-input" id="am-name" placeholder="e.g. Chase" /></div>
+<div class="acct-modal-row">
+<div><label>Statement day (1–28)</label><input class="add-input" id="am-day" type="number" min="1" max="28" placeholder="7" /></div>
+<div><label>Every X months</label><input class="add-input" id="am-freq" type="number" min="1" max="12" placeholder="1" value="1" oninput="amFreqChanged()" /></div>
+</div>
+<div id="am-anchor-row" style="display:none"><label>First statement month</label>
+<select class="add-input" id="am-anchor">
+<option value="1">January</option><option value="2">February</option><option value="3">March</option>
+<option value="4">April</option><option value="5">May</option><option value="6">June</option>
+<option value="7">July</option><option value="8">August</option><option value="9">September</option>
+<option value="10">October</option><option value="11">November</option><option value="12">December</option>
+</select></div>
+<div class="modal-btns">
+<button class="add-btn secondary" onclick="closeAcctModal()">Cancel</button>
+<button class="add-btn" id="am-save-btn" onclick="saveAcctModal()">Save</button>
 </div>
 </div>
 </div>
@@ -491,14 +518,10 @@ function openEditModal(id){
   el('edit-modal').classList.add('open');
   setTimeout(()=>el('edit-task-input').focus(),100);
 }
-function closeEditModal(){el('edit-modal').classList.remove('open');editingTaskId=null;editingEntryDate=null;el('edit-acct-day').style.display='none';el('edit-acct-day').value='';}
+function closeEditModal(){el('edit-modal').classList.remove('open');editingTaskId=null;editingEntryDate=null;}
 function saveEditTask(){
   const text=el('edit-task-input').value.trim();if(!text)return;
-  if(editingTaskId&&editingTaskId.startsWith('acct:')){
-    const id=editingTaskId.slice(5);
-    saveEditAcct(id,text,el('edit-acct-day').value);
-    showToast('Account updated ✓');
-  }else if(editingTaskId){
+  if(editingTaskId){
     const t=data.tasks.find(x=>x.id===editingTaskId);
     if(t){t.text=text;saveToDropbox();renderTodo();showToast('Task updated ✓');}
   }else if(editingEntryDate){
@@ -578,10 +601,6 @@ function getMonthCols(){
   return cols;
 }
 function monthLabel(ym){const[y,m]=ym.split('-');return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'short',year:'2-digit'});}
-function isStmtDue(acct,ym){
-  const now=new Date();const[y,m]=ym.split('-').map(Number);
-  return now>=new Date(y,m-1,acct.dueDay+1);
-}
 function renderStatements(){
   const mc=el('main-content');
   const cols=getMonthCols();const nowYM=realToday().slice(0,7);
@@ -594,11 +613,18 @@ ${due.length?`<div class="due-banner"><div class="due-banner-title">⚠ Statemen
 <thead><tr><th>Account</th><th>Due</th>${cols.map(c=>`<th class="stmt-cell" style="${c===nowYM?'color:var(--module-color)':''}">${monthLabel(c)}</th>`).join('')}<th></th></tr></thead>
 <tbody>
 ${accounts.length===0?`<tr><td colspan="${cols.length+3}" class="empty-state">No accounts yet.</td></tr>`:''}
-${accounts.map(a=>`
-<tr>
+${accounts.map(a=>{
+  const freq=a.frequencyMonths||1;
+  return`<tr>
 <td class="stmt-acct">${escHtml(a.name)}</td>
-<td class="stmt-day">${ordinal(a.dueDay)}</td>
-${cols.map(c=>{const k=`${a.id}_${c}`;const ck=!!data.statements.months[k];const du=isStmtDue(a,c)&&!ck;return`<td class="stmt-cell"><button class="stmt-tick${ck?' checked':''}${du?' due':''}" onclick="toggleStmt('${a.id}','${c}')">${ck?'✓':''}</button></td>`;}).join('')}
+<td class="stmt-day">${ordinal(a.dueDay)}${freq>1?`<br><span style="font-size:0.65rem;color:var(--muted)">every ${freq}m</span>`:''}</td>
+${cols.map(c=>{
+  const isDueMon=isStmtDueCal(a,c);
+  const k=`${a.id}_${c}`;const ck=!!data.statements.months[k];
+  const du=isStmtDue(a,c)&&!ck;
+  if(!isDueMon&&!ck)return`<td class="stmt-cell"><div class="stmt-arrow">→</div></td>`;
+  return`<td class="stmt-cell"><button class="stmt-tick${ck?' checked':''}${du?' due':''}" onclick="toggleStmt('${a.id}','${c}')">${ck?'✓':''}</button></td>`;
+}).join('')}
 <td style="position:relative">
 <button class="opts-btn" onclick="toggleOptsMenu('stmt-${a.id}',event)">⋮</button>
 <div class="opts-menu" id="opts-stmt-${a.id}" style="right:0;top:1.8rem">
@@ -606,51 +632,88 @@ ${cols.map(c=>{const k=`${a.id}_${c}`;const ck=!!data.statements.months[k];const
 <button class="danger-opt" onclick="deleteAcct('${a.id}')">🗑 Delete</button>
 </div>
 </td>
-</tr>`).join('')}
+</tr>`;}).join('')}
 </tbody>
 </table>
 </div>
-<div class="card" style="margin-top:1rem">
-<div class="section-title" style="margin-top:0">Add account</div>
-<div style="display:grid;grid-template-columns:1fr auto auto;gap:0.5rem;align-items:end">
-<div><label style="font-size:0.7rem;color:var(--muted);display:block;margin-bottom:0.25rem">Account name</label><input class="add-input" id="acct-name" placeholder="e.g. Chase" /></div>
-<div><label style="font-size:0.7rem;color:var(--muted);display:block;margin-bottom:0.25rem">Statement day</label><input class="add-input" id="acct-day" type="number" min="1" max="28" placeholder="7" style="width:64px;text-align:center" /></div>
-<button class="add-btn" onclick="addAcct()" style="align-self:flex-end">Add</button>
-</div>
+<div style="margin-top:1rem;text-align:center">
+<button class="add-btn" onclick="openAddAcctModal()">+ Add account</button>
 </div>`;
 }
 function toggleStmt(aid,ym){
-  const k=`${aid}_${ym}`;
-  if(data.statements.months[k])delete data.statements.months[k];else data.statements.months[k]=realToday();
-  saveToDropbox();renderStatements();
+// STATEMENTS HELPERS
+function isStmtDueCal(acct,ym){
+  // Returns true if ym (YYYY-MM) is a due month for this account
+  const freq=acct.frequencyMonths||1;
+  if(freq===1)return true;
+  const anchor=acct.anchorMonth||1;
+  const[y,m]=ym.split('-').map(Number);
+  // months since anchor month in year 0: diff mod freq === 0
+  const diff=((m-anchor)%freq+freq)%freq;
+  return diff===0;
 }
-function addAcct(){
-  const name=el('acct-name').value.trim();const day=parseInt(el('acct-day').value);
+function isStmtDue(acct,ym){
+  if(!isStmtDueCal(acct,ym))return false;
+  const now=new Date();const[y,m]=ym.split('-').map(Number);
+  return now>=new Date(y,m-1,acct.dueDay+1);
+}
+let acctModalEditId=null;
+function openAddAcctModal(){
+  acctModalEditId=null;
+  el('acct-modal-title').textContent='Add account';
+  el('am-name').value='';el('am-day').value='';el('am-freq').value='1';el('am-anchor').value='1';
+  el('am-anchor-row').style.display='none';
+  el('am-save-btn').textContent='Add';
+  el('acct-modal').classList.add('open');
+  setTimeout(()=>el('am-name').focus(),100);
+}
+function openEditAcctModal(id){
+  const a=data.statements.accounts.find(x=>x.id===id);if(!a)return;
+  acctModalEditId=id;
+  el('acct-modal-title').textContent='Edit account';
+  el('am-name').value=a.name;
+  el('am-day').value=a.dueDay;
+  el('am-freq').value=a.frequencyMonths||1;
+  el('am-anchor').value=a.anchorMonth||1;
+  el('am-anchor-row').style.display=(a.frequencyMonths||1)>1?'block':'none';
+  el('am-save-btn').textContent='Save';
+  el('acct-modal').classList.add('open');
+  setTimeout(()=>el('am-name').focus(),100);
+}
+function closeAcctModal(){el('acct-modal').classList.remove('open');acctModalEditId=null;}
+function amFreqChanged(){
+  const freq=parseInt(el('am-freq').value)||1;
+  el('am-anchor-row').style.display=freq>1?'block':'none';
+}
+function saveAcctModal(){
+  const name=el('am-name').value.trim();
+  const day=parseInt(el('am-day').value);
+  const freq=parseInt(el('am-freq').value)||1;
+  const anchor=parseInt(el('am-anchor').value)||1;
   if(!name||!day||day<1||day>28){showToast('Enter a name and day (1–28)');return;}
-  data.statements.accounts.push({id:uid(),name,dueDay:day});
-  saveToDropbox();renderStatements();
+  if(freq<1||freq>12){showToast('Frequency must be 1–12 months');return;}
+  if(acctModalEditId){
+    const a=data.statements.accounts.find(x=>x.id===acctModalEditId);if(!a)return;
+    a.name=name;a.dueDay=day;a.frequencyMonths=freq;if(freq>1)a.anchorMonth=anchor;else delete a.anchorMonth;
+    showToast('Account updated ✓');
+  }else{
+    const acct={id:uid(),name,dueDay:day,frequencyMonths:freq};
+    if(freq>1)acct.anchorMonth=anchor;
+    data.statements.accounts.push(acct);
+    showToast('Account added ✓');
+  }
+  saveToDropbox();closeAcctModal();renderStatements();
 }
 function deleteAcct(id){
+  if(!confirm('Delete this account and all its statement records?'))return;
   data.statements.accounts=data.statements.accounts.filter(x=>x.id!==id);
   Object.keys(data.statements.months).forEach(k=>{if(k.startsWith(id))delete data.statements.months[k];});
   saveToDropbox();renderStatements();
 }
-function openEditAcctModal(id){
-  const a=data.statements.accounts.find(x=>x.id===id);if(!a)return;
-  editingTaskId='acct:'+id;editingEntryDate=null;
-  el('edit-modal-title').textContent='Edit account';
-  el('edit-task-input').value=a.name;
-  const dayField=el('edit-acct-day');dayField.value=a.dueDay;dayField.style.display='block';
-  el('edit-modal').classList.add('open');
-  setTimeout(()=>el('edit-task-input').focus(),100);
-}
-function saveEditAcct(id,newName,newDay){
-  const a=data.statements.accounts.find(x=>x.id===id);if(!a)return;
-  if(newName)a.name=newName;
-  const d=parseInt(newDay);if(d>=1&&d<=28)a.dueDay=d;
+  const k=`${aid}_${ym}`;
+  if(data.statements.months[k])delete data.statements.months[k];else data.statements.months[k]=realToday();
   saveToDropbox();renderStatements();
 }
-
 // JOURNAL
 const prompts=['What made you smile today?','What went better than expected?','Who or what are you grateful for today?','What\'s one small win from today?','What moment would you save from today?','What are you looking forward to tomorrow?','What did you do today that you\'re proud of?'];
 
