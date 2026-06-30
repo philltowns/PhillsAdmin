@@ -1001,7 +1001,14 @@ async function prListFolder(path){
     entries=entries.filter(e=>e['.tag']==='folder'||(e['.tag']==='file'&&(prIsImage(e.name)||prIsVideo(e.name))));
     entries.sort((a,b)=>a['.tag']!==b['.tag']?(a['.tag']==='folder'?-1:1):a.name.localeCompare(b.name));
     prState.entries=entries;prState.path=path;localStorage.setItem('pr_last_folder',path);
-  }catch(e){showToast('Could not load that folder');prState.entries=[];prState.path=path;}
+  }catch(e){
+    console.error('Photo Review list_folder error:',e);
+    let msg=e&&e.message?e.message:String(e);
+    try{const parsed=JSON.parse(msg);if(parsed.error_summary)msg=parsed.error_summary;}catch(_){}
+    if(msg.length>80)msg=msg.slice(0,80)+'…';
+    showToast('Error: '+msg);
+    prState.entries=[];prState.path=path;
+  }
   prState.loading=false;renderPhotoReview();
 }
 async function prGetThumb(path){
