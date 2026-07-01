@@ -42,13 +42,23 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 #auth-screen p{color:var(--muted);max-width:280px;line-height:1.6;}
 .auth-btn{background:var(--accent);color:#fff;border:none;padding:0.875rem 2rem;border-radius:var(--radius);font-size:1rem;font-family:var(--font);font-weight:500;cursor:pointer;}
 .logo-mark{width:72px;height:72px;background:var(--accent);border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:2.2rem;}
-#bio-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:2rem;gap:1.5rem;text-align:center;}
-#bio-screen.visible{display:flex;}
-#bio-screen h2{font-size:1.5rem;font-weight:600;}
-#bio-screen p{color:var(--muted);max-width:260px;line-height:1.6;}
-.bio-icon{font-size:3rem;}
-.bio-btn{background:var(--accent);color:#fff;border:none;padding:0.875rem 2rem;border-radius:var(--radius);font-size:1rem;font-family:var(--font);font-weight:500;cursor:pointer;}
-.bio-skip{background:none;border:none;color:var(--muted);font-size:0.85rem;font-family:var(--font);cursor:pointer;text-decoration:underline;}
+#pin-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:2rem;gap:1.2rem;text-align:center;background:var(--bg);}
+#pin-screen.visible{display:flex;}
+.pin-title{font-size:1.4rem;font-weight:600;}
+.pin-sub{color:var(--muted);font-size:0.85rem;}
+.pin-dots{display:flex;gap:0.75rem;justify-content:center;margin:0.5rem 0;}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--muted);background:none;transition:background 0.15s;}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent);}
+.pin-dot.error{background:#ef4444;border-color:#ef4444;}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:0.65rem;width:100%;max-width:280px;}
+.pin-key{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:1.4rem;font-weight:500;font-family:var(--font);border-radius:var(--radius);padding:0.9rem;cursor:pointer;transition:background 0.1s;}
+.pin-key:active{background:var(--surface);}
+.pin-key.empty{background:none;border-color:transparent;cursor:default;}
+.pin-key.del{font-size:1rem;}
+.pin-error{color:#ef4444;font-size:0.82rem;min-height:1.2rem;}
+.pin-lockout{color:var(--accent2);font-size:0.85rem;}
+@keyframes pinShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+.pin-dots.shake{animation:pinShake 0.4s ease;}
 #app{display:none;flex-direction:column;min-height:100dvh;}
 #app.visible{display:flex;}
 header{background:var(--header-bg);border-bottom:1px solid var(--border);padding:0.75rem 1rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;transition:background 0.3s;}
@@ -227,12 +237,20 @@ input[type="date"]{color-scheme:dark;}
 <p>Connect to Dropbox to load your data and keep everything backed up automatically.</p>
 <button class="auth-btn" onclick="startDropboxAuth()">Connect Dropbox</button>
 </div>
-<div id="bio-screen">
-<div class="bio-icon">👆</div>
-<h2>Unlock</h2>
-<p>Use your fingerprint to access Phill's Admin.</p>
-<button class="bio-btn" onclick="doBiometric()">Use Fingerprint</button>
-<button class="bio-skip" onclick="bioSkip()">Skip for now</button>
+<div id="pin-screen">
+<div class="pin-title">🔒 Phill's Admin</div>
+<div class="pin-sub" id="pin-prompt">Enter your PIN</div>
+<div class="pin-dots" id="pin-dots">
+<div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div><div class="pin-dot" id="pd2"></div>
+<div class="pin-dot" id="pd3"></div><div class="pin-dot" id="pd4"></div><div class="pin-dot" id="pd5"></div>
+</div>
+<div class="pin-error" id="pin-error"></div>
+<div class="pin-pad" id="pin-pad">
+<button class="pin-key" onclick="pinKey('1')">1</button><button class="pin-key" onclick="pinKey('2')">2</button><button class="pin-key" onclick="pinKey('3')">3</button>
+<button class="pin-key" onclick="pinKey('4')">4</button><button class="pin-key" onclick="pinKey('5')">5</button><button class="pin-key" onclick="pinKey('6')">6</button>
+<button class="pin-key" onclick="pinKey('7')">7</button><button class="pin-key" onclick="pinKey('8')">8</button><button class="pin-key" onclick="pinKey('9')">9</button>
+<div class="pin-key empty"></div><button class="pin-key" onclick="pinKey('0')">0</button><button class="pin-key del" onclick="pinDel()">⌫</button>
+</div>
 </div>
 <div id="app">
 <header>
@@ -302,7 +320,7 @@ let data={
   journal:[],watchlist:[],
   weight:{entries:[],target:null,heightCm:null},
   shopping:[],
-  settings:{journalBoundaryHour:0,bioEnabled:false}
+  settings:{journalBoundaryHour:0,pinEnabled:false,pinHash:'',pinTimeoutMins:5}
 };
 let accessToken=null,currentTab='home',currentBucket='today';
 let currentWatchFilter='all',weightChart=null;
@@ -358,26 +376,89 @@ async function saveToDropbox(){
 }
 async function syncDropbox(){await loadFromDropbox();renderTab();showToast('Synced ✓');}
 
-// BIOMETRIC
-async function enableBiometric(){
-  if(!window.PublicKeyCredential){showToast('Not supported on this device/browser');return;}
-  try{
-    const challenge=new Uint8Array(32);crypto.getRandomValues(challenge);
-    const cred=await navigator.credentials.create({publicKey:{challenge,rp:{name:"PhillsAdmin"},user:{id:new Uint8Array(16),name:"phill",displayName:"Phill"},pubKeyCredParams:[{type:"public-key",alg:-7}],authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required"},timeout:60000}});
-    if(cred){data.settings.bioEnabled=true;localStorage.setItem('bio_enabled','1');saveToDropbox();showToast('Fingerprint lock enabled ✓');renderSettings();}
-  }catch(e){showToast('Could not enable — try again');}
+
+// PIN LOCK
+let pinEntry='',pinAttempts=0,pinLockUntil=0,pinMode='unlock',pinSetStage=0,pinSetFirst='';
+let pinInactivityTimer=null,pinLastActivity=Date.now();
+async function sha256(str){const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');}
+function pinKey(d){
+  if(Date.now()<pinLockUntil)return;
+  if(pinEntry.length>=6)return;
+  pinEntry+=d;updatePinDots();
+  if(pinEntry.length===6)setTimeout(pinSubmit,120);
 }
-function disableBiometric(){
-  data.settings.bioEnabled=false;localStorage.removeItem('bio_enabled');saveToDropbox();showToast('Fingerprint lock disabled');renderSettings();
+function pinDel(){if(pinEntry.length>0){pinEntry=pinEntry.slice(0,-1);updatePinDots();}}
+function updatePinDots(state){
+  for(var i=0;i<6;i++){var d=el('pd'+i);d.className='pin-dot'+(i<pinEntry.length?' filled':'')+(state==='error'?' error':'');}
 }
-async function doBiometric(){
-  try{
-    const challenge=new Uint8Array(32);crypto.getRandomValues(challenge);
-    await navigator.credentials.get({publicKey:{challenge,userVerification:"required",timeout:60000,allowCredentials:[]}});
-    showApp();
-  }catch(e){showApp();}
+function pinShake(){
+  var dots=el('pin-dots');dots.classList.remove('shake');void dots.offsetWidth;dots.classList.add('shake');
+  updatePinDots('error');setTimeout(function(){pinEntry='';updatePinDots();},400);
 }
-function bioSkip(){showApp();}
+async function pinSubmit(){
+  if(pinMode==='unlock'){
+    if(Date.now()<pinLockUntil){el('pin-error').textContent='Too many attempts. Wait '+Math.ceil((pinLockUntil-Date.now())/1000)+'s';pinEntry='';return;}
+    var h=await sha256(pinEntry);var stored=localStorage.getItem('pin_hash');
+    if(h===stored){pinAttempts=0;pinEntry='';showApp();}
+    else{pinAttempts++;pinShake();
+      if(pinAttempts>=5){pinLockUntil=Date.now()+30000;pinEntry='';startLockoutCountdown();}
+      else el('pin-error').textContent='Incorrect PIN ('+(5-pinAttempts)+' attempt'+(pinAttempts<4?'s':'')+' left)';}
+  }else if(pinMode==='set-new'){
+    if(pinSetStage===0){pinSetFirst=pinEntry;pinEntry='';pinSetStage=1;el('pin-prompt').textContent='Confirm your PIN';el('pin-error').textContent='';updatePinDots();}
+    else if(pinEntry===pinSetFirst){
+      var h2=await sha256(pinEntry);localStorage.setItem('pin_hash',h2);
+      data.settings.pinEnabled=true;data.settings.pinHash=h2;
+      saveToDropbox();showToast('PIN set ✓');pinEntry='';pinSetStage=0;pinMode='unlock';
+      el('pin-screen').classList.remove('visible');el('app').classList.add('visible');renderSettings();
+    }else{pinShake();el('pin-prompt').textContent="PINs didn't match — try again";pinSetFirst='';pinSetStage=0;}
+  }else if(pinMode==='set-confirm-old'){
+    var h3=await sha256(pinEntry);
+    if(h3===localStorage.getItem('pin_hash')){pinEntry='';pinMode='set-new';pinSetStage=0;pinSetFirst='';el('pin-prompt').textContent='Enter new PIN';el('pin-error').textContent='';updatePinDots();}
+    else{pinShake();el('pin-error').textContent='Incorrect PIN';}
+  }else if(pinMode==='disable-confirm'){
+    var h4=await sha256(pinEntry);
+    if(h4===localStorage.getItem('pin_hash')){
+      localStorage.removeItem('pin_hash');data.settings.pinEnabled=false;data.settings.pinHash='';
+      saveToDropbox();showToast('PIN lock disabled');pinEntry='';pinMode='unlock';
+      el('pin-screen').classList.remove('visible');el('app').classList.add('visible');renderSettings();
+    }else{pinShake();el('pin-error').textContent='Incorrect PIN';}
+  }
+}
+function startLockoutCountdown(){
+  el('pin-error').textContent='Too many attempts. Wait 30s';
+  el('pin-pad').style.opacity='0.3';el('pin-pad').style.pointerEvents='none';
+  var iv=setInterval(function(){
+    var left=Math.ceil((pinLockUntil-Date.now())/1000);
+    if(left<=0){clearInterval(iv);pinAttempts=0;el('pin-error').textContent='';el('pin-pad').style.opacity='';el('pin-pad').style.pointerEvents='';}
+    else el('pin-error').textContent='Too many attempts. Wait '+left+'s';
+  },1000);
+}
+function showPinScreen(mode,prompt){
+  pinMode=mode||'unlock';pinEntry='';pinSetStage=0;pinSetFirst='';
+  el('pin-prompt').textContent=prompt||'Enter your PIN';
+  el('pin-error').textContent='';el('pin-pad').style.opacity='';el('pin-pad').style.pointerEvents='';
+  updatePinDots();el('pin-screen').classList.add('visible');
+}
+function resetInactivityTimer(){
+  pinLastActivity=Date.now();clearTimeout(pinInactivityTimer);
+  if(!data.settings.pinEnabled)return;
+  var ms=(data.settings.pinTimeoutMins||5)*60000;
+  pinInactivityTimer=setTimeout(function(){
+    if(el('pin-screen').classList.contains('visible'))return;
+    el('app').classList.remove('visible');showPinScreen('unlock','Enter your PIN');
+  },ms);
+}
+document.addEventListener('touchstart',resetInactivityTimer,{passive:true});
+document.addEventListener('click',resetInactivityTimer,{passive:true});
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible'&&data.settings.pinEnabled){
+    var ms=(data.settings.pinTimeoutMins||5)*60000;
+    if(Date.now()-pinLastActivity>ms){el('app').classList.remove('visible');showPinScreen('unlock','Enter your PIN');}
+  }
+});
+function enablePin(){el('app').classList.remove('visible');showPinScreen('set-new','Enter new 6-digit PIN');}
+function disablePin(){el('app').classList.remove('visible');showPinScreen('disable-confirm','Enter current PIN to disable');}
+function changePin(){el('app').classList.remove('visible');showPinScreen('set-confirm-old','Enter current PIN');}
 
 // MENU
 function toggleMenu(){el('side-menu').classList.toggle('open');el('menu-overlay').classList.toggle('open');}
@@ -639,10 +720,10 @@ function renderStatements(){
   var mc=el('main-content');
   var cols=getMonthCols();var nowYM=realToday().slice(0,7);
   var accounts=[].concat(data.statements.accounts).sort(function(a,b){return a.dueDay-b.dueDay;});
-  var due=accounts.filter(function(a){return isStmtDue(a,nowYM)&&!data.statements.months[a.id+'_'+nowYM];});
+  var due=[];cols.forEach(function(c){accounts.forEach(function(a){if(isStmtDue(a,c)&&!data.statements.months[a.id+'_'+c]){due.push({name:a.name,ym:c});}});});
   var colHeaders=cols.map(function(c){return'<th class="stmt-cell"'+(c===nowYM?' style="color:var(--module-color)"':'')+'>'+monthLabel(c)+'</th>';}).join('');
   var banner='';
-  if(due.length){banner='<div class="due-banner"><div class="due-banner-title">⚠ Statements to check</div>'+due.map(function(a){return'<div style="font-size:0.83rem">'+escHtml(a.name)+'</div>';}).join('')+'</div>';}
+  if(due.length){banner='<div class="due-banner"><div class="due-banner-title">⚠ Statements to check</div>'+due.map(function(d){return'<div style="font-size:0.83rem">'+escHtml(d.name)+(d.ym!==nowYM?' <span style="opacity:0.7">('+monthLabel(d.ym)+')</span>':'')+'</div>';}).join('')+'</div>';}
   var rows=accounts.length===0?'<tr><td colspan="'+(cols.length+3)+'" class="empty-state">No accounts yet.</td></tr>':accounts.map(function(a){return stmtRowHtml(a,cols);}).join('');
   mc.innerHTML=banner
     +'<div class="stmt-wrap"><table class="stmt-table">'
@@ -1020,10 +1101,17 @@ function renderSettings(){
 </div>
 <div class="section-title">Security</div>
 <div class="card">
-<div class="settings-row">
-<div><div class="settings-label">Fingerprint lock</div><div class="settings-sub">Require fingerprint to open the app</div></div>
-<button class="switch${data.settings.bioEnabled?' on':''}" onclick="${data.settings.bioEnabled?'disableBiometric()':'enableBiometric()'}"><div class="switch-dot"></div></button>
-</div>
+${data.settings.pinEnabled?`
+<div class="settings-row"><div><div class="settings-label">PIN lock</div><div class="settings-sub">App locks after ${data.settings.pinTimeoutMins||5} min inactivity</div></div><button class="add-btn danger" onclick="disablePin()">Disable</button></div>
+<div class="settings-row" style="margin-top:0.6rem"><div><div class="settings-label">Change PIN</div><div class="settings-sub">Set a new 6-digit PIN</div></div><button class="add-btn secondary" onclick="changePin()">Change</button></div>
+<div class="settings-row" style="margin-top:0.6rem"><div><div class="settings-label">Auto-lock timeout</div><div class="settings-sub">Lock after this period of inactivity</div></div>
+<select class="mini" onchange="setPinTimeout(this.value)">
+${[1,5,10,30].map(m=>`<option value="${m}"${(data.settings.pinTimeoutMins||5)===m?' selected':''}>${m} min</option>`).join('')}
+</select></div>
+`:`
+<div class="settings-row"><div><div class="settings-label">PIN lock</div><div class="settings-sub">Require a 6-digit PIN to open the app</div></div><button class="add-btn" onclick="enablePin()">Enable</button></div>
+`}
+<div style="font-size:0.7rem;color:var(--muted);margin-top:0.5rem">If locked out, clear site data in Chrome to reset.</div>
 </div>
 <div class="section-title">Journal</div>
 <div class="card">
@@ -1043,15 +1131,17 @@ ${[0,1,2,3,4,5,6].map(h=>`<option value="${h}"${bh===h?' selected':''}>${h===0?'
 </div>`;
 }
 function setBoundary(v){data.settings.journalBoundaryHour=parseInt(v);saveToDropbox();}
+function setPinTimeout(v){data.settings.pinTimeoutMins=parseInt(v);saveToDropbox();resetInactivityTimer();showToast('Timeout updated ✓');}
 
 // SHOW APP
 function showApp(){
-  el('bio-screen').classList.remove('visible');
+  el('pin-screen').classList.remove('visible');
   el('app').classList.add('visible');
   const savedTheme=localStorage.getItem('theme')||'dark';
   document.documentElement.setAttribute('data-theme',savedTheme);
   showTab('home');
   loadFromDropbox().then(()=>renderTab());
+  resetInactivityTimer();
 }
 
 // INIT
@@ -1068,10 +1158,9 @@ async function init(){
     if(p.weight)data.weight={...data.weight,...p.weight};
     if(p.settings)data.settings={...data.settings,...p.settings};
   }catch(e){}
-  const bioOn=data.settings.bioEnabled||localStorage.getItem('bio_enabled')==='1';
-  if(bioOn&&window.PublicKeyCredential){
-    el('bio-screen').classList.add('visible');
-    setTimeout(()=>doBiometric(),300);
+  const pinOn=data.settings.pinEnabled||!!localStorage.getItem('pin_hash');
+  if(pinOn&&localStorage.getItem('pin_hash')){
+    showPinScreen('unlock','Enter your PIN');
   }else{
     showApp();
   }
