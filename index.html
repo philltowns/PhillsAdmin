@@ -227,6 +227,26 @@ input[type="date"]{color-scheme:dark;}
 .acct-modal h3{margin:0;font-size:1rem;}
 .acct-modal label{font-size:0.72rem;color:var(--muted);display:block;margin-bottom:0.25rem;}
 .acct-modal-row{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;}
+.proj-card{background:var(--card);border-radius:var(--radius);margin-bottom:0.75rem;overflow:hidden;border:1px solid var(--border);}
+.proj-header{display:flex;align-items:center;gap:0.6rem;padding:0.75rem 0.9rem;cursor:pointer;}
+.proj-title{flex:1;font-weight:600;font-size:0.95rem;}
+.proj-meta{font-size:0.75rem;color:var(--muted);white-space:nowrap;}
+.proj-chevron{font-size:0.7rem;color:var(--muted);transition:transform 0.2s;}
+.proj-chevron.open{transform:rotate(90deg);}
+.proj-progress-bar{height:3px;background:var(--border);}
+.proj-progress-fill{height:3px;background:var(--module-color);transition:width 0.3s;}
+.proj-tasks{padding:0 0.9rem 0.75rem;}
+.proj-task-item{display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0;border-bottom:1px solid var(--border);position:relative;}
+.proj-task-item:last-child{border-bottom:none;}
+.proj-task-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);background:none;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:var(--module-color);}
+.proj-task-check.done{background:var(--module-color);border-color:var(--module-color);color:#fff;}
+.proj-task-text{flex:1;font-size:0.88rem;}
+.proj-task-text.done{text-decoration:line-through;color:var(--muted);}
+.proj-task-in-today{font-size:0.65rem;color:var(--module-color);margin-left:0.3rem;}
+.proj-add-row{display:flex;gap:0.5rem;margin-top:0.5rem;}
+.proj-done-all{font-size:0.8rem;color:var(--module-color);text-align:center;padding:0.4rem 0;font-weight:600;}
+.proj-archived-toggle{text-align:center;margin-bottom:0.75rem;}
+.home-tile[data-nav="projects"] .home-tile-accent{background:#8b5cf6;}
 [data-theme="light"] input[type="date"],[data-theme="rainbow"] input[type="date"],[data-theme="spectrum"] input[type="date"]{color-scheme:light;}
 </style>
 </head>
@@ -267,6 +287,7 @@ input[type="date"]{color-scheme:dark;}
 <div class="menu-section">Modules</div>
 <button class="menu-item" onclick="navTo('home')"><span class="menu-item-icon">🏠</span>Home</button>
 <button class="menu-item" onclick="navTo('todo')"><span class="menu-item-icon">✅</span>To Do</button>
+<button class="menu-item" onclick="navTo('projects')"><span class="menu-item-icon">📁</span>Projects</button>
 <button class="menu-item" onclick="navTo('shopping')"><span class="menu-item-icon">🛒</span>Shopping</button>
 <button class="menu-item" onclick="navTo('birthdays')"><span class="menu-item-icon">🎂</span>Birthdays</button>
 <button class="menu-item" onclick="navTo('statements')"><span class="menu-item-icon">🏦</span>Statements</button>
@@ -307,6 +328,16 @@ input[type="date"]{color-scheme:dark;}
 </div>
 </div>
 </div>
+<div class="modal-overlay" id="proj-modal">
+<div class="modal">
+<h3 id="proj-modal-title">New project</h3>
+<input class="add-input" id="pm-name" placeholder="Project title…" onkeydown="if(event.key==='Enter')saveProjModal()" />
+<div class="modal-btns">
+<button class="add-btn secondary" onclick="closeProjModal()">Cancel</button>
+<button class="add-btn" id="pm-save-btn" onclick="saveProjModal()">Create</button>
+</div>
+</div>
+</div>
 <div class="toast" id="toast"></div>
 <script>
 const DROPBOX_APP_KEY='kg70xibrafahre2';
@@ -320,6 +351,7 @@ let data={
   journal:[],watchlist:[],
   weight:{entries:[],target:null,heightCm:null},
   shopping:[],
+  projects:[],
   settings:{journalBoundaryHour:0,pinEnabled:false,pinHash:'',pinTimeoutMins:5}
 };
 let accessToken=null,currentTab='home',currentBucket='today';
@@ -357,7 +389,7 @@ async function loadFromDropbox(){
     const res=await fetch('https://content.dropboxapi.com/2/files/download',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Dropbox-API-Arg':JSON.stringify({path:DATA_FILE})}});
     if(res.status===409){await saveToDropbox();return;}
     const json=await res.json();
-    ['tasks','birthdays','journal','watchlist','shopping'].forEach(k=>{if(json[k])data[k]=json[k];});
+    ['tasks','birthdays','journal','watchlist','shopping','projects'].forEach(k=>{if(json[k])data[k]=json[k];});
     if(json.statements)data.statements=json.statements;
     if(json.weight)data.weight={...data.weight,...json.weight};
     if(json.settings)data.settings={...data.settings,...json.settings};
@@ -475,8 +507,8 @@ function setTheme(t){
 function setModuleAttr(tab){document.documentElement.setAttribute('data-module',tab);}
 
 // TABS
-const tabTitles={home:"Phill's Admin",todo:'To Do',birthdays:'Birthdays',statements:'Statements',journal:'Journal',watchlist:'Watch list',weight:'Weight',shopping:'Shopping',settings:'Settings'};
-const tabIcons={home:'🏠',todo:'✅',birthdays:'🎂',statements:'🏦',journal:'✨',watchlist:'🎬',weight:'⚖️',shopping:'🛒',settings:'⚙️'};
+const tabTitles={home:"Phill's Admin",todo:'To Do',projects:'Projects',birthdays:'Birthdays',statements:'Statements',journal:'Journal',watchlist:'Watch list',weight:'Weight',shopping:'Shopping',settings:'Settings'};
+const tabIcons={home:'🏠',todo:'✅',projects:'📁',birthdays:'🎂',statements:'🏦',journal:'✨',watchlist:'🎬',weight:'⚖️',shopping:'🛒',settings:'⚙️'};
 function showTab(tab){
   currentTab=tab;setModuleAttr(tab);
   document.querySelectorAll('.menu-item').forEach(b=>b.classList.remove('active'));
@@ -488,6 +520,7 @@ function renderTab(){
   closeAllOptsMenus();
   if(currentTab==='home')renderHome();
   else if(currentTab==='todo')renderTodo();
+  else if(currentTab==='projects')renderProjects();
   else if(currentTab==='birthdays')renderBirthdays();
   else if(currentTab==='statements')renderStatements();
   else if(currentTab==='journal')renderJournal();
@@ -511,17 +544,20 @@ function renderHome(){
   const latestW=[...data.weight.entries].sort((a,b)=>b.date.localeCompare(a.date))[0];
   const unwatched=data.watchlist.filter(w=>!w.watched).length;
   const shopLeft=data.shopping.filter(s=>!s.done).length;
+  const activeProjects=(data.projects||[]).filter(p=>!p.archived);
+  const projSummary=activeProjects.length===0?'No active projects':activeProjects.length+' active project'+(activeProjects.length!==1?'s':'');
   mc.innerHTML=`
 <div class="home-greeting">Good ${greeting()}, Phill</div>
 <div class="home-date">${dayName}, ${dateLabel}</div>
 <div class="home-grid">
-<div class="home-tile" onclick="showTab('todo')" data-nav="todo"><div class="home-tile-accent"></div><div class="home-tile-icon">✅</div><div class="home-tile-name">To Do</div><div class="home-tile-summary">${todayTasks.length===0?'No tasks today':`${doneTasks}/${todayTasks.length} done today`}</div></div>
-<div class="home-tile" onclick="showTab('shopping')" data-nav="shopping"><div class="home-tile-accent"></div><div class="home-tile-icon">🛒</div><div class="home-tile-name">Shopping</div><div class="home-tile-summary">${shopLeft===0?'List is clear':`${shopLeft} item${shopLeft!==1?'s':''} to get`}</div></div>
-<div class="home-tile" onclick="showTab('birthdays')" data-nav="birthdays"><div class="home-tile-accent"></div><div class="home-tile-icon">🎂</div><div class="home-tile-name">Birthdays</div><div class="home-tile-summary">${dueBdays.length===0?'None in 4 weeks':`${dueBdays.length} in next 4 weeks`}</div></div>
-<div class="home-tile" onclick="showTab('statements')" data-nav="statements"><div class="home-tile-accent"></div><div class="home-tile-icon">🏦</div><div class="home-tile-name">Statements</div><div class="home-tile-summary">${dueStmts.length===0?'All up to date':`${dueStmts.length} to check`}</div></div>
+<div class="home-tile" onclick="showTab('todo')" data-nav="todo"><div class="home-tile-accent"></div><div class="home-tile-icon">✅</div><div class="home-tile-name">To Do</div><div class="home-tile-summary">${todayTasks.length===0?'No tasks today':doneTasks+'/'+todayTasks.length+' done today'}</div></div>
+<div class="home-tile" onclick="showTab('projects')" data-nav="projects"><div class="home-tile-accent"></div><div class="home-tile-icon">📁</div><div class="home-tile-name">Projects</div><div class="home-tile-summary">${projSummary}</div></div>
+<div class="home-tile" onclick="showTab('shopping')" data-nav="shopping"><div class="home-tile-accent"></div><div class="home-tile-icon">🛒</div><div class="home-tile-name">Shopping</div><div class="home-tile-summary">${shopLeft===0?'List is clear':shopLeft+' item'+(shopLeft!==1?'s':'')+' to get'}</div></div>
+<div class="home-tile" onclick="showTab('birthdays')" data-nav="birthdays"><div class="home-tile-accent"></div><div class="home-tile-icon">🎂</div><div class="home-tile-name">Birthdays</div><div class="home-tile-summary">${dueBdays.length===0?'None in 4 weeks':dueBdays.length+' in next 4 weeks'}</div></div>
+<div class="home-tile" onclick="showTab('statements')" data-nav="statements"><div class="home-tile-accent"></div><div class="home-tile-icon">🏦</div><div class="home-tile-name">Statements</div><div class="home-tile-summary">${dueStmts.length===0?'All up to date':dueStmts.length+' to check'}</div></div>
 <div class="home-tile" onclick="showTab('journal')" data-nav="journal"><div class="home-tile-accent"></div><div class="home-tile-icon">✨</div><div class="home-tile-name">Journal</div><div class="home-tile-summary">${data.journal.find(e=>e.date===todayStr())?'Entry logged today':'Nothing logged yet today'}</div></div>
-<div class="home-tile" onclick="showTab('watchlist')" data-nav="watchlist"><div class="home-tile-accent"></div><div class="home-tile-icon">🎬</div><div class="home-tile-name">Watch list</div><div class="home-tile-summary">${unwatched===0?'All watched':`${unwatched} to watch`}</div></div>
-<div class="home-tile" onclick="showTab('weight')" data-nav="weight" style="grid-column:span 2"><div class="home-tile-accent"></div><div class="home-tile-icon">⚖️</div><div class="home-tile-name">Weight</div><div class="home-tile-summary">${latestW?`Last: ${latestW.kg} kg on ${fmtDate(latestW.date)}`:'No entries yet'}</div></div>
+<div class="home-tile" onclick="showTab('watchlist')" data-nav="watchlist"><div class="home-tile-accent"></div><div class="home-tile-icon">🎬</div><div class="home-tile-name">Watch list</div><div class="home-tile-summary">${unwatched===0?'All watched':unwatched+' to watch'}</div></div>
+<div class="home-tile" onclick="showTab('weight')" data-nav="weight" style="grid-column:span 2"><div class="home-tile-accent"></div><div class="home-tile-icon">⚖️</div><div class="home-tile-name">Weight</div><div class="home-tile-summary">${latestW?'Last: '+latestW.kg+' kg on '+fmtDate(latestW.date):'No entries yet'}</div></div>
 </div>`;
 }
 
@@ -579,6 +615,12 @@ function addTask(){
 function toggleTask(id){
   const t=data.tasks.find(x=>x.id===id);if(!t)return;
   if(t.done&&t.recurring)t.done=false;else t.done=!t.done;
+  if(t.done&&t.sourceTaskId){
+    const src=data.tasks.find(x=>x.id===t.sourceTaskId);
+    if(src){src.done=true;src.inToday=false;}
+    data.tasks=data.tasks.filter(x=>x.id!==id);
+    saveToDropbox();renderTodo();return;
+  }
   saveToDropbox();renderTodo();
 }
 function deleteTask(id){data.tasks=data.tasks.filter(x=>x.id!==id);saveToDropbox();renderTodo();}
@@ -610,6 +652,227 @@ function saveEditTask(){
     if(e){e.text=text;saveToDropbox();renderJournal();showToast('Entry updated ✓');}
   }
   closeEditModal();
+}
+
+// PROJECTS
+var projExpanded={};
+var projShowArchived=false;
+var dragSrcIdx=null,dragProjId=null;
+
+function projSubtasks(projId){return(data.projects||[]).find(function(p){return p.id===projId;})||null;}
+function projTasks(projId){return(data.tasks||[]).filter(function(t){return t.projectId===projId;});}
+
+function renderProjects(){
+  if(!data.projects)data.projects=[];
+  var mc=el('main-content');
+  var active=data.projects.filter(function(p){return!p.archived;});
+  var archived=data.projects.filter(function(p){return p.archived;});
+  var html='';
+
+  if(active.length===0&&!projShowArchived){
+    html+='<div class="empty-state">No projects yet. Add one below.</div>';
+  }
+  active.forEach(function(p){html+=projCardHtml(p);});
+
+  html+='<div style="text-align:center;margin-top:0.75rem"><button class="add-btn" onclick="openAddProjectModal()">+ New project</button></div>';
+
+  if(archived.length>0){
+    html+='<div class="proj-archived-toggle"><button class="add-btn secondary" onclick="projToggleArchived()">'+(projShowArchived?'Hide':'Show')+' archived ('+archived.length+')</button></div>';
+    if(projShowArchived){
+      archived.forEach(function(p){html+=projCardHtml(p,true);});
+    }
+  }
+  mc.innerHTML=html;
+  attachDragHandlers();
+}
+
+function projCardHtml(p,isArchived){
+  var tasks=projTasks(p.id);
+  var done=tasks.filter(function(t){return t.done;}).length;
+  var total=tasks.length;
+  var pct=total===0?0:Math.round(done/total*100);
+  var allDone=total>0&&done===total;
+  var isOpen=!!projExpanded[p.id];
+  var html='<div class="proj-card" id="projcard-'+p.id+'">';
+  html+='<div class="proj-header" onclick="projToggleExpand(\''+p.id+'\')">';
+  html+='<span class="proj-chevron'+(isOpen?' open':'')+'">▶</span>';
+  html+='<span class="proj-title">'+escHtml(p.title)+(allDone?' ✓':'')+(isArchived?' <span style="font-size:0.7rem;color:var(--muted)">[archived]</span>':'')+'</span>';
+  html+='<span class="proj-meta">'+done+'/'+total+'</span>';
+  if(!isArchived){
+    html+='<button class="opts-btn" onclick="event.stopPropagation();toggleOptsMenu(\'proj-'+p.id+'\',event)">⋮</button>';
+    html+='<div class="opts-menu" id="opts-proj-'+p.id+'" style="right:0;top:2rem">';
+    html+='<button onclick="openRenameProjectModal(\''+p.id+'\')">✏️ Rename</button>';
+    html+='<button onclick="archiveProject(\''+p.id+'\')">📦 Archive</button>';
+    html+='<button class="danger-opt" onclick="deleteProject(\''+p.id+'\')">🗑 Delete</button>';
+    html+='</div>';
+  }else{
+    html+='<button class="opts-btn" onclick="event.stopPropagation();toggleOptsMenu(\'proj-'+p.id+'\',event)">⋮</button>';
+    html+='<div class="opts-menu" id="opts-proj-'+p.id+'" style="right:0;top:2rem">';
+    html+='<button onclick="unarchiveProject(\''+p.id+'\')">↺ Restore</button>';
+    html+='<button class="danger-opt" onclick="deleteProject(\''+p.id+'\')">🗑 Delete</button>';
+    html+='</div>';
+  }
+  html+='</div>';
+  html+='<div class="proj-progress-bar"><div class="proj-progress-fill" style="width:'+pct+'%"></div></div>';
+  if(isOpen){
+    html+='<div class="proj-tasks" id="projtasks-'+p.id+'">';
+    if(tasks.length===0)html+='<div class="empty-state" style="font-size:0.82rem;padding:0.5rem 0">No sub-tasks yet.</div>';
+    tasks.forEach(function(t,i){
+      html+='<div class="proj-task-item" draggable="true" data-proj="'+p.id+'" data-idx="'+i+'" data-tid="'+t.id+'">';
+      html+='<button class="proj-task-check'+(t.done?' done':'')+'" onclick="toggleProjTask(\''+t.id+'\')">'+( t.done?'✓':'')+'</button>';
+      html+='<span class="proj-task-text'+(t.done?' done':'')+'">'+escHtml(t.text)+'</span>';
+      if(t.inToday&&!t.done)html+='<span class="proj-task-in-today">📋 in Today</span>';
+      html+='<button class="opts-btn" onclick="toggleOptsMenu(\'pt-'+t.id+'\',event)">⋮</button>';
+      html+='<div class="opts-menu" id="opts-pt-'+t.id+'" style="right:0;top:1.8rem">';
+      html+='<button onclick="openEditProjTaskModal(\''+t.id+'\')">✏️ Edit</button>';
+      if(!t.inToday&&!t.done)html+='<button onclick="projTaskToToday(\''+t.id+'\')">📋 Move to Today</button>';
+      html+='<button class="danger-opt" onclick="deleteProjTask(\''+t.id+'\')">🗑 Delete</button>';
+      html+='</div></div>';
+    });
+    if(!isArchived){
+      html+='<div class="proj-add-row">';
+      html+='<input class="add-input" id="pt-input-'+p.id+'" placeholder="Add sub-task…" style="flex:1" onkeydown="if(event.key===\'Enter\')addProjTask(\''+p.id+'\')" />';
+      html+='<button class="add-btn" onclick="addProjTask(\''+p.id+'\')">Add</button>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+function projToggleExpand(id){projExpanded[id]=!projExpanded[id];renderProjects();}
+function projToggleArchived(){projShowArchived=!projShowArchived;renderProjects();}
+
+function addProjTask(projId){
+  var inp=el('pt-input-'+projId);if(!inp)return;
+  var text=inp.value.trim();if(!text)return;
+  var tasks=projTasks(projId);
+  data.tasks.push({id:uid(),projectId:projId,text:text,done:false,inToday:false,order:tasks.length,bucket:'project',created:realToday()});
+  saveToDropbox();renderProjects();projExpanded[projId]=true;
+}
+
+function toggleProjTask(id){
+  var t=data.tasks.find(function(x){return x.id===id;});if(!t)return;
+  t.done=!t.done;
+  if(t.done&&t.inToday){
+    data.tasks=data.tasks.filter(function(x){return!(x.sourceTaskId===id);});
+    t.inToday=false;
+  }
+  saveToDropbox();renderProjects();
+}
+
+function deleteProjTask(id){
+  var t=data.tasks.find(function(x){return x.id===id;});
+  if(t&&t.inToday)data.tasks=data.tasks.filter(function(x){return x.sourceTaskId!==id;});
+  data.tasks=data.tasks.filter(function(x){return x.id!==id;});
+  saveToDropbox();renderProjects();
+}
+
+function projTaskToToday(id){
+  var t=data.tasks.find(function(x){return x.id===id;});if(!t)return;
+  var proj=data.projects.find(function(p){return p.id===t.projectId;});
+  var label=proj?'['+proj.title+'] '+t.text:t.text;
+  data.tasks.push({id:uid(),text:label,bucket:'today',done:false,recurring:false,carried:false,created:realToday(),sourceTaskId:id});
+  t.inToday=true;
+  saveToDropbox();renderProjects();showToast('Added to Today ✓');
+}
+
+function openAddProjectModal(){
+  projModalEditId=null;
+  el('proj-modal-title').textContent='New project';
+  el('pm-name').value='';
+  el('pm-save-btn').textContent='Create';
+  el('proj-modal').classList.add('open');
+  setTimeout(function(){el('pm-name').focus();},100);
+}
+function openRenameProjectModal(id){
+  var p=data.projects.find(function(x){return x.id===id;});if(!p)return;
+  projModalEditId=id;
+  el('proj-modal-title').textContent='Rename project';
+  el('pm-name').value=p.title;
+  el('pm-save-btn').textContent='Save';
+  el('proj-modal').classList.add('open');
+  setTimeout(function(){el('pm-name').focus();},100);
+}
+function closeProjModal(){el('proj-modal').classList.remove('open');projModalEditId=null;}
+function saveProjModal(){
+  var name=el('pm-name').value.trim();if(!name)return;
+  if(projModalEditId){
+    var p=data.projects.find(function(x){return x.id===projModalEditId;});
+    if(p){p.title=name;showToast('Renamed ✓');}
+  }else{
+    var np={id:uid(),title:name,archived:false,createdAt:realToday()};
+    data.projects.push(np);
+    projExpanded[np.id]=true;
+    showToast('Project created ✓');
+  }
+  saveToDropbox();closeProjModal();renderProjects();
+}
+var projModalEditId=null;
+
+function archiveProject(id){
+  var p=data.projects.find(function(x){return x.id===id;});if(!p)return;
+  p.archived=true;delete projExpanded[id];saveToDropbox();renderProjects();showToast('Archived ✓');
+}
+function unarchiveProject(id){
+  var p=data.projects.find(function(x){return x.id===id;});if(!p)return;
+  p.archived=false;saveToDropbox();renderProjects();showToast('Restored ✓');
+}
+function deleteProject(id){
+  if(!confirm('Delete this project and all its sub-tasks?'))return;
+  data.tasks=data.tasks.filter(function(t){return t.projectId!==id;});
+  data.projects=data.projects.filter(function(p){return p.id!==id;});
+  delete projExpanded[id];saveToDropbox();renderProjects();
+}
+
+function openEditProjTaskModal(id){
+  var t=data.tasks.find(function(x){return x.id===id;});if(!t)return;
+  editingTaskId=id;
+  el('edit-modal-title').textContent='Edit sub-task';
+  el('edit-task-input').value=t.text;
+  el('edit-modal').classList.add('open');
+  setTimeout(function(){el('edit-task-input').focus();},100);
+}
+
+function saveEditTask(){
+  var text=el('edit-task-input').value.trim();if(!text)return;
+  if(editingTaskId){
+    var t=data.tasks.find(function(x){return x.id===editingTaskId;});
+    if(t){
+      t.text=text;
+      saveToDropbox();
+      if(t.projectId)renderProjects();else renderTodo();
+      showToast('Updated ✓');
+    }
+  }else if(editingEntryDate){
+    var e=data.journal.find(function(x){return x.date===editingEntryDate;});
+    if(e){e.text=text;saveToDropbox();renderJournal();showToast('Entry updated ✓');}
+  }
+  closeEditModal();
+}
+
+function attachDragHandlers(){
+  document.querySelectorAll('.proj-task-item[draggable]').forEach(function(el){
+    el.addEventListener('dragstart',function(e){
+      dragSrcIdx=parseInt(this.getAttribute('data-idx'));
+      dragProjId=this.getAttribute('data-proj');
+      e.dataTransfer.effectAllowed='move';
+    });
+    el.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect='move';});
+    el.addEventListener('drop',function(e){
+      e.preventDefault();
+      var toIdx=parseInt(this.getAttribute('data-idx'));
+      var toProjId=this.getAttribute('data-proj');
+      if(dragProjId!==toProjId||dragSrcIdx===toIdx)return;
+      var tasks=data.tasks.filter(function(t){return t.projectId===dragProjId;});
+      var moved=tasks.splice(dragSrcIdx,1)[0];
+      tasks.splice(toIdx,0,moved);
+      tasks.forEach(function(t,i){t.order=i;});
+      data.tasks=data.tasks.filter(function(t){return t.projectId!==dragProjId;}).concat(tasks);
+      saveToDropbox();renderProjects();
+    });
+  });
 }
 
 // BIRTHDAYS
