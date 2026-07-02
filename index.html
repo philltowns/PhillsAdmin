@@ -246,6 +246,8 @@ input[type="date"]{color-scheme:dark;}
 .proj-add-row{display:flex;gap:0.5rem;margin-top:0.5rem;}
 .proj-done-all{font-size:0.8rem;color:var(--module-color);text-align:center;padding:0.4rem 0;font-weight:600;}
 .proj-archived-toggle{text-align:center;margin-bottom:0.75rem;}
+.task-drag-handle{color:var(--muted);font-size:1rem;padding:0 0.3rem 0 0;cursor:grab;flex-shrink:0;touch-action:none;}
+.task-item.drag-over{border-top:2px solid var(--module-color);}
 .home-tile[data-nav="projects"] .home-tile-accent{background:#8b5cf6;}
 [data-theme="light"] input[type="date"],[data-theme="rainbow"] input[type="date"],[data-theme="spectrum"] input[type="date"]{color-scheme:light;}
 </style>
@@ -557,7 +559,7 @@ function renderHome(){
 <div class="home-tile" onclick="showTab('statements')" data-nav="statements"><div class="home-tile-accent"></div><div class="home-tile-icon">🏦</div><div class="home-tile-name">Statements</div><div class="home-tile-summary">${dueStmts.length===0?'All up to date':dueStmts.length+' to check'}</div></div>
 <div class="home-tile" onclick="showTab('journal')" data-nav="journal"><div class="home-tile-accent"></div><div class="home-tile-icon">✨</div><div class="home-tile-name">Journal</div><div class="home-tile-summary">${data.journal.find(e=>e.date===todayStr())?'Entry logged today':'Nothing logged yet today'}</div></div>
 <div class="home-tile" onclick="showTab('watchlist')" data-nav="watchlist"><div class="home-tile-accent"></div><div class="home-tile-icon">🎬</div><div class="home-tile-name">Watch list</div><div class="home-tile-summary">${unwatched===0?'All watched':unwatched+' to watch'}</div></div>
-<div class="home-tile" onclick="showTab('weight')" data-nav="weight" style="grid-column:span 2"><div class="home-tile-accent"></div><div class="home-tile-icon">⚖️</div><div class="home-tile-name">Weight</div><div class="home-tile-summary">${latestW?'Last: '+latestW.kg+' kg on '+fmtDate(latestW.date):'No entries yet'}</div></div>
+<div class="home-tile" onclick="showTab('weight')" data-nav="weight"><div class="home-tile-accent"></div><div class="home-tile-icon">⚖️</div><div class="home-tile-name">Weight</div><div class="home-tile-summary">${latestW?'Last: '+latestW.kg+' kg on '+fmtDate(latestW.date):'No entries yet'}</div></div>
 </div>`;
 }
 
@@ -573,36 +575,56 @@ function toggleOptsMenu(id,ev){
 document.addEventListener('click',()=>closeAllOptsMenus());
 
 function renderTodo(){
-  const mc=el('main-content');
-  const items=data.tasks.filter(t=>t.bucket===currentBucket);
-  mc.innerHTML=`
-<div class="bucket-tabs">${['today','soon','someday'].map(b=>`<button class="bucket-tab${currentBucket===b?' active':''}" onclick="setBucket('${b}')">${b.charAt(0).toUpperCase()+b.slice(1)}</button>`).join('')}</div>
-<div class="card">
-${items.length===0?`<div class="empty-state">Nothing here — add a task below.</div>`:''}
-${items.map(t=>`
-<div class="task-item" style="position:relative">
-<button class="task-check${t.done?' done':''}" onclick="toggleTask('${t.id}')">${t.done?'✓':''}</button>
-<div class="task-body">
-<span class="task-text${t.done?' done':''}">${escHtml(t.text)}</span>${t.carried?`<span class="carried-badge">carried</span>`:''} ${t.recurring?`<span class="recurring-badge">${t.recurringFreq||'recurring'}</span>`:''}
-</div>
-<button class="opts-btn" onclick="toggleOptsMenu('${t.id}',event)">⋮</button>
-<div class="opts-menu" id="opts-${t.id}" style="right:0;top:1.8rem">
-<button onclick="openEditModal('${t.id}')">✏️ Edit</button>
-<button class="danger-opt" onclick="deleteTask('${t.id}')">🗑 Delete</button>
-</div>
-</div>`).join('')}
-<div class="add-row">
-<input class="add-input" id="task-input" placeholder="Add a task…" style="flex:1" onkeydown="if(event.key==='Enter')addTask()" />
-<button class="add-btn" onclick="addTask()">Add</button>
-</div>
-${currentBucket==='today'?`
-<div class="recurring-opts">
-<label><input type="checkbox" id="task-recur"> Recurring</label>
-<select class="mini" id="task-freq"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
-</div>`:''}
-</div>
-${currentBucket==='today'?`<button class="eod-btn" onclick="endOfDay()">🌙 End of day — carry incomplete tasks forward</button>`:''}
-<p style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:0.5rem">${items.filter(t=>t.done).length} of ${items.length} done</p>`;
+  var mc=el('main-content');
+  var items=data.tasks.filter(function(t){return t.bucket===currentBucket;});
+  var bucketTabs='<div class="bucket-tabs">'+['today','soon','someday'].map(function(b){return'<button class="bucket-tab'+(currentBucket===b?' active':'')+'" onclick="setBucket(\''+b+'\')">'+(b.charAt(0).toUpperCase()+b.slice(1))+'</button>';}).join('')+'</div>';
+  var taskRows='';
+  if(items.length===0)taskRows='<div class="empty-state">Nothing here — add a task below.</div>';
+  items.forEach(function(t,i){
+    taskRows+='<div class="task-item" draggable="true" data-idx="'+i+'" data-tid="'+t.id+'" style="position:relative">';
+    taskRows+='<span class="task-drag-handle">⠿</span>';
+    taskRows+='<button class="task-check'+(t.done?' done':'')+'" onclick="toggleTask(\''+t.id+'\')">'+( t.done?'✓':'')+'</button>';
+    taskRows+='<div class="task-body"><span class="task-text'+(t.done?' done':'')+'">'+escHtml(t.text)+'</span>';
+    if(t.carried)taskRows+='<span class="carried-badge">carried</span>';
+    if(t.recurring)taskRows+=' <span class="recurring-badge">'+(t.recurringFreq||'recurring')+'</span>';
+    taskRows+='</div>';
+    taskRows+='<button class="opts-btn" onclick="toggleOptsMenu(\''+t.id+'\',event)">⋮</button>';
+    taskRows+='<div class="opts-menu" id="opts-'+t.id+'" style="right:0;top:1.8rem">';
+    taskRows+='<button onclick="openEditModal(\''+t.id+'\')">✏️ Edit</button>';
+    taskRows+='<button class="danger-opt" onclick="deleteTask(\''+t.id+'\')">🗑 Delete</button>';
+    taskRows+='</div></div>';
+  });
+  var addRow='<div class="add-row"><input class="add-input" id="task-input" placeholder="Add a task…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTask()" /><button class="add-btn" onclick="addTask()">Add</button></div>';
+  var recurRow=currentBucket==='today'?'<div class="recurring-opts"><label><input type="checkbox" id="task-recur"> Recurring</label><select class="mini" id="task-freq"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>':'';
+  var eodBtn=currentBucket==='today'?'<button class="eod-btn" onclick="endOfDay()">🌙 End of day — carry incomplete tasks forward</button>':'';
+  var summary='<p style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:0.5rem">'+items.filter(function(t){return t.done;}).length+' of '+items.length+' done</p>';
+  mc.innerHTML=bucketTabs+'<div class="card">'+taskRows+addRow+recurRow+'</div>'+eodBtn+summary;
+  attachTodoDragHandlers();
+}
+var todoDragSrcIdx=null;
+function attachTodoDragHandlers(){
+  document.querySelectorAll('.task-item[draggable]').forEach(function(node){
+    node.addEventListener('dragstart',function(e){
+      todoDragSrcIdx=parseInt(this.getAttribute('data-idx'));
+      e.dataTransfer.effectAllowed='move';
+      this.style.opacity='0.5';
+    });
+    node.addEventListener('dragend',function(){this.style.opacity='';document.querySelectorAll('.task-item').forEach(function(n){n.classList.remove('drag-over');});});
+    node.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect='move';this.classList.add('drag-over');});
+    node.addEventListener('dragleave',function(){this.classList.remove('drag-over');});
+    node.addEventListener('drop',function(e){
+      e.preventDefault();this.classList.remove('drag-over');this.style.opacity='';
+      var toIdx=parseInt(this.getAttribute('data-idx'));
+      if(todoDragSrcIdx===null||todoDragSrcIdx===toIdx)return;
+      var bucketTasks=data.tasks.filter(function(t){return t.bucket===currentBucket;});
+      var rest=data.tasks.filter(function(t){return t.bucket!==currentBucket;});
+      var moved=bucketTasks.splice(todoDragSrcIdx,1)[0];
+      bucketTasks.splice(toIdx,0,moved);
+      data.tasks=rest.concat(bucketTasks);
+      todoDragSrcIdx=null;
+      saveToDropbox();renderTodo();
+    });
+  });
 }
 function setBucket(b){currentBucket=b;renderTodo();}
 function addTask(){
