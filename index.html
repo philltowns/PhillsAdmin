@@ -1438,7 +1438,7 @@ async function init(){
   const cached=localStorage.getItem('dbx_cache');
   if(cached)try{
     const p=JSON.parse(cached);
-    ['tasks','birthdays','journal','watchlist','shopping'].forEach(k=>{if(p[k])data[k]=p[k];});
+    ['tasks','birthdays','journal','watchlist','shopping','projects'].forEach(k=>{if(p[k])data[k]=p[k];});
     if(p.statements)data.statements=p.statements;
     if(p.weight)data.weight={...data.weight,...p.weight};
     if(p.settings)data.settings={...data.settings,...p.settings};
