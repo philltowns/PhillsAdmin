@@ -640,8 +640,6 @@ function toggleTask(id){
   if(t.done&&t.sourceTaskId){
     const src=data.tasks.find(x=>x.id===t.sourceTaskId);
     if(src){src.done=true;src.inToday=false;}
-    data.tasks=data.tasks.filter(x=>x.id!==id);
-    saveToDropbox();renderTodo();return;
   }
   saveToDropbox();renderTodo();
 }
