@@ -648,7 +648,10 @@ function endOfDay(){
   if(!confirm('End of day: completed tasks removed, incomplete carried forward.'))return;
   data.tasks=data.tasks.filter(t=>{
     if(t.bucket!=='today')return true;
-    if(t.done){if(t.recurring){t.done=false;}else return false;}
+    if(t.done){
+      if(t.recurring){t.done=false;t.carried=false;return true;}
+      else return false;
+    }
     t.carried=true;return true;
   });
   saveToDropbox();renderTodo();showToast('Done ✓ — incomplete tasks carried forward');
