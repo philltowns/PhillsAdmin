@@ -123,6 +123,7 @@ select.mini{background:var(--input-bg);border:1px solid var(--border);color:var(
 .recurring-badge{font-size:0.62rem;background:var(--module-light);color:var(--module-color);border:1px solid var(--border);padding:0.1rem 0.4rem;border-radius:99px;margin-left:0.4rem;vertical-align:middle;}
 .project-badge{font-size:0.62rem;background:rgba(8,145,178,0.15);color:#0891b2;border:1px solid rgba(8,145,178,0.3);padding:0.1rem 0.4rem;border-radius:99px;margin-left:0.4rem;vertical-align:middle;}
 .eod-btn{width:100%;margin-top:0.75rem;background:rgba(247,201,72,0.1);border:1px solid rgba(247,201,72,0.3);color:var(--accent2);padding:0.65rem;border-radius:var(--radius-sm);font-family:var(--font);font-size:0.85rem;cursor:pointer;}
+.eod-btn.due{background:rgba(247,201,72,0.4);border:1px solid rgba(247,201,72,0.8);color:var(--text);font-weight:600;}
 .recurring-opts{display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;}
 .recurring-opts label{font-size:0.78rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;}
 .opts-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:0.25rem 0.4rem;line-height:1;}
@@ -354,7 +355,7 @@ let data={
   weight:{entries:[],target:null,heightCm:null},
   shopping:[],
   projects:[],
-  settings:{journalBoundaryHour:0,pinEnabled:false,pinHash:'',pinTimeoutMins:5}
+  settings:{journalBoundaryHour:0,pinEnabled:false,pinHash:'',pinTimeoutMins:5,lastEodDate:null}
 };
 let accessToken=null,currentTab='home',currentBucket='today';
 let currentWatchFilter='all',weightChart=null;
@@ -596,7 +597,8 @@ function renderTodo(){
   });
   var addRow='<div class="add-row"><input class="add-input" id="task-input" placeholder="Add a task…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTask()" /><button class="add-btn" onclick="addTask()">Add</button></div>';
   var recurRow=currentBucket==='today'?'<div class="recurring-opts"><label><input type="checkbox" id="task-recur"> Recurring</label><select class="mini" id="task-freq"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>':'';
-  var eodBtn=currentBucket==='today'?'<button class="eod-btn" onclick="endOfDay()">🌙 End of day — carry incomplete tasks forward</button>':'';
+  var eodDue=data.settings.lastEodDate!==realToday();
+  var eodBtn=currentBucket==='today'?'<button class="eod-btn'+(eodDue?' due':'')+'" onclick="endOfDay()">🌙 End of day — carry incomplete tasks forward</button>':'';
   var summary='<p style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:0.5rem">'+items.filter(function(t){return t.done;}).length+' of '+items.length+' done</p>';
   mc.innerHTML=bucketTabs+'<div class="card">'+taskRows+addRow+recurRow+'</div>'+eodBtn+summary;
   attachTodoDragHandlers();
@@ -646,7 +648,8 @@ function toggleTask(id){
 }
 function deleteTask(id){data.tasks=data.tasks.filter(x=>x.id!==id);saveToDropbox();renderTodo();}
 function endOfDay(){
-  if(!confirm('End of day: completed tasks removed, incomplete carried forward.'))return;
+  var due=data.settings.lastEodDate!==realToday();
+  if(!due&&!confirm('It\'s not past midnight yet — pressing End of Day now will mark incomplete tasks as carried forward early. Continue?'))return;
   data.tasks=data.tasks.filter(t=>{
     if(t.bucket!=='today')return true;
     if(t.done){
@@ -655,6 +658,7 @@ function endOfDay(){
     }
     t.carried=true;return true;
   });
+  data.settings.lastEodDate=realToday();
   saveToDropbox();renderTodo();showToast('Done ✓ — incomplete tasks carried forward');
 }
 function openEditModal(id){
@@ -1453,6 +1457,19 @@ async function init(){
   }
 }
 init();
+
+// SERVICE WORKER — silent background updates, no more hard-refresh-after-upload
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js');
+  });
+  let swRefreshed=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(swRefreshed)return;
+    swRefreshed=true;
+    window.location.reload();
+  });
+}
 </script>
 </body>
 </html>
