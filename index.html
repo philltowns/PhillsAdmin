@@ -585,7 +585,7 @@ function renderTodo(){
     taskRows+='<span class="task-drag-handle">⠿</span>';
     taskRows+='<button class="task-check'+(t.done?' done':'')+'" onclick="toggleTask(\''+t.id+'\')">'+( t.done?'✓':'')+'</button>';
     taskRows+='<div class="task-body"><span class="task-text'+(t.done?' done':'')+'">'+escHtml(t.text)+'</span>';
-    if(t.carried)taskRows+='<span class="carried-badge">carried</span>';
+    if(t.carried&&!t.done)taskRows+='<span class="carried-badge">carried</span>';
     if(t.recurring)taskRows+=' <span class="recurring-badge">'+(t.recurringFreq||'recurring')+'</span>';
     taskRows+='</div>';
     taskRows+='<button class="opts-btn" onclick="toggleOptsMenu(\''+t.id+'\',event)">⋮</button>';
@@ -637,6 +637,7 @@ function addTask(){
 function toggleTask(id){
   const t=data.tasks.find(x=>x.id===id);if(!t)return;
   if(t.done&&t.recurring)t.done=false;else t.done=!t.done;
+  if(t.done){t.carried=false;}
   if(t.done&&t.sourceTaskId){
     const src=data.tasks.find(x=>x.id===t.sourceTaskId);
     if(src){src.done=true;src.inToday=false;}
