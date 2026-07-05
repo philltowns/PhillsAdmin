@@ -348,6 +348,13 @@ const REDIRECT_URI='https://philltowns.github.io/PhillsAdmin/';
 const DATA_FILE='/PhillsAdmin/data.json';
 const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24','#fb923c','#f472b6','#e879f9','#38bdf8','#4ade80','#facc15'];
 
+// CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
+// Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
+const CHANGELOG=[
+  {v:'2.0',date:'5 Jul 2026',notes:'End of Day due-highlighting + smart confirm, local-timezone date fix, background service worker, version history'},
+  {v:'1.0',date:'—',notes:'Baseline — all modules built prior to version tracking (Home, To Do, Projects, Statements, Journal, Watch list, Weight, Shopping, Birthdays, Settings)'}
+];
+
 let data={
   tasks:[],birthdays:[],
   statements:{accounts:[],months:{}},
@@ -1380,6 +1387,7 @@ function renderSettings(){
   const mc=el('main-content');
   const theme=localStorage.getItem('theme')||'dark';
   const bh=data.settings.journalBoundaryHour||0;
+  var historyRows=CHANGELOG.map(function(c){return '<div class="settings-row" style="align-items:flex-start;flex-direction:column;gap:0.15rem"><div class="settings-label">v'+c.v+' — '+c.date+'</div><div class="settings-sub">'+c.notes+'</div></div>';}).join('<div style="height:0.6rem"></div>');
   mc.innerHTML=`
 <div class="section-title" style="margin-top:0">Appearance</div>
 <div class="card">
@@ -1419,6 +1427,10 @@ ${[0,1,2,3,4,5,6].map(h=>`<option value="${h}"${bh===h?' selected':''}>${h===0?'
 <div><div class="settings-label">Sync with Dropbox</div><div class="settings-sub">Pull the latest data now</div></div>
 <button class="add-btn secondary" onclick="syncDropbox()">↻ Sync</button>
 </div>
+</div>
+<div class="section-title">Update History</div>
+<div class="card">
+${historyRows}
 </div>`;
 }
 function setBoundary(v){data.settings.journalBoundaryHour=parseInt(v);saveToDropbox();}
