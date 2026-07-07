@@ -175,6 +175,13 @@ select.mini{background:var(--input-bg);border:1px solid var(--border);color:var(
 .watch-filters{display:flex;gap:0.4rem;margin-bottom:1rem;flex-wrap:wrap;}
 .watch-filter{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:0.3rem 0.7rem;border-radius:99px;font-size:0.76rem;font-family:var(--font);cursor:pointer;}
 .watch-filter.active{background:var(--module-color);border-color:var(--module-color);color:#fff;}
+.subtab-bar{display:flex;gap:0.5rem;margin-bottom:1rem;}
+.subtab-btn{flex:1;background:var(--card);border:1px solid var(--border);color:var(--muted);padding:0.6rem;border-radius:var(--radius-sm);font-family:var(--font);font-size:0.88rem;font-weight:600;cursor:pointer;}
+.subtab-btn.active{background:var(--module-color);border-color:var(--module-color);color:#fff;}
+.tv-series-row{display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0;border-bottom:1px solid var(--border);cursor:pointer;}
+.tv-series-row:last-child{border-bottom:none;}
+.tv-series-name{flex:1;font-size:0.88rem;font-weight:500;}
+.tv-episodes{padding:0 0 0.5rem 1.4rem;}
 .watch-item{display:flex;align-items:center;gap:0.65rem;padding:0.65rem 0;border-bottom:1px solid var(--border);}
 .watch-item:last-child{border-bottom:none;}
 .watch-type-badge{font-size:0.62rem;padding:0.12rem 0.4rem;border-radius:99px;font-weight:500;flex-shrink:0;}
@@ -351,6 +358,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'3.0',date:'7 Jul 2026',notes:'TV tracker (shows → series → episodes, tickable) with a To Watch list, Update History moved to its own page, Birthdays "Today" section + same-day sort fix'},
   {v:'2.0',date:'5 Jul 2026',notes:'End of Day due-highlighting + smart confirm, local-timezone date fix, background service worker, version history'},
   {v:'1.0',date:'—',notes:'Baseline — all modules built prior to version tracking (Home, To Do, Projects, Statements, Journal, Watch list, Weight, Shopping, Birthdays, Settings)'}
 ];
@@ -362,10 +370,12 @@ let data={
   weight:{entries:[],target:null,heightCm:null},
   shopping:[],
   projects:[],
-  settings:{journalBoundaryHour:0,pinEnabled:false,pinHash:'',pinTimeoutMins:5,lastEodDate:null}
+  tvshows:[],
+  settings:{journalBoundaryHour:0,pinEnabled:false,pinHash:'',pinTimeoutMins:5,lastEodDate:null,tvMigrated:false}
 };
 let accessToken=null,currentTab='home',currentBucket='today';
 let currentWatchFilter='all',weightChart=null;
+let currentWatchSub='movies',tvShowExpanded={},tvSeriesExpanded={};
 let editingTaskId=null,editingEntryDate=null,longPressTimer=null;
 
 function el(id){return document.getElementById(id);}
@@ -399,7 +409,7 @@ async function loadFromDropbox(){
     const res=await fetch('https://content.dropboxapi.com/2/files/download',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Dropbox-API-Arg':JSON.stringify({path:DATA_FILE})}});
     if(res.status===409){await saveToDropbox();return;}
     const json=await res.json();
-    ['tasks','birthdays','journal','watchlist','shopping','projects'].forEach(k=>{if(json[k])data[k]=json[k];});
+    ['tasks','birthdays','journal','watchlist','shopping','projects','tvshows'].forEach(k=>{if(json[k])data[k]=json[k];});
     if(json.statements)data.statements=json.statements;
     if(json.weight)data.weight={...data.weight,...json.weight};
     if(json.settings)data.settings={...data.settings,...json.settings};
@@ -552,7 +562,7 @@ function renderHome(){
   const nowYM=realToday().slice(0,7);
   const dueStmts=data.statements.accounts.filter(a=>isStmtDue(a,nowYM)&&!data.statements.months[`${a.id}_${nowYM}`]);
   const latestW=[...data.weight.entries].sort((a,b)=>b.date.localeCompare(a.date))[0];
-  const unwatched=data.watchlist.filter(w=>!w.watched).length;
+  const unwatched=data.watchlist.filter(w=>!w.watched).length+(data.tvshows?data.tvshows.filter(s=>s.toWatch).length:0);
   const shopLeft=data.shopping.filter(s=>!s.done).length;
   const activeProjects=(data.projects||[]).filter(p=>!p.archived);
   const projSummary=activeProjects.length===0?'No active projects':activeProjects.length+' active project'+(activeProjects.length!==1?'s':'');
@@ -912,10 +922,11 @@ function attachDragHandlers(){
 
 // BIRTHDAYS
 function daysUntil(mmdd){
-  const now=new Date();const[m,d]=mmdd.split('-').map(Number);
-  let next=new Date(now.getFullYear(),m-1,d);
-  if(next<now)next=new Date(now.getFullYear()+1,m-1,d);
-  return Math.ceil((next-now)/86400000);
+  const now=new Date();const todayMid=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const[m,d]=mmdd.split('-').map(Number);
+  let next=new Date(todayMid.getFullYear(),m-1,d);
+  if(next<todayMid)next=new Date(todayMid.getFullYear()+1,m-1,d);
+  return Math.round((next-todayMid)/86400000);
 }
 function calcAge(year,mmdd){
   if(!year)return null;
@@ -943,15 +954,17 @@ function birthdayCard(b){
 function renderBirthdays(){
   const mc=el('main-content');
   const sorted=[...data.birthdays].sort((a,b)=>daysUntil(a.mmdd)-daysUntil(b.mmdd));
-  const upcoming=sorted.filter(b=>daysUntil(b.mmdd)<=28);
+  const today=sorted.filter(b=>daysUntil(b.mmdd)===0);
+  const upcoming=sorted.filter(b=>{const dd=daysUntil(b.mmdd);return dd>0&&dd<=28;});
   const rest=sorted.filter(b=>daysUntil(b.mmdd)>28);
   mc.innerHTML=`
+${today.length?`<div class="section-title">🎉 Today</div><div class="card">${today.map(birthdayCard).join('')}</div>`:''}
 ${upcoming.length?`<div class="section-title">Upcoming (next 4 weeks)</div><div class="card">${upcoming.map(birthdayCard).join('')}</div>`:''}
-<div class="section-title">${upcoming.length?'All birthdays':'Birthdays'}</div>
+<div class="section-title">${upcoming.length||today.length?'All birthdays':'Birthdays'}</div>
 <div class="card">
-${rest.length===0&&upcoming.length===0?`<div class="empty-state">No birthdays added yet.</div>`:''}
+${rest.length===0&&upcoming.length===0&&today.length===0?`<div class="empty-state">No birthdays added yet.</div>`:''}
 ${rest.map(birthdayCard).join('')}
-${rest.length===0&&upcoming.length>0?`<div class="empty-state">Everyone else shows above in Upcoming.</div>`:''}
+${rest.length===0&&(upcoming.length>0||today.length>0)?`<div class="empty-state">Everyone else shows above.</div>`:''}
 <div style="margin-top:0.75rem">
 <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
 <input class="add-input" id="bday-name" placeholder="Name" style="flex:1;min-width:100px" />
@@ -1215,39 +1228,222 @@ function openEditEntryModal(date){
 
 // WATCHLIST
 function renderWatchlist(){
-  const mc=el('main-content');
-  let items=[...data.watchlist];
-  if(currentWatchFilter==='film')items=items.filter(x=>x.type==='film');
-  else if(currentWatchFilter==='tv')items=items.filter(x=>x.type==='tv');
-  else if(currentWatchFilter==='unwatched')items=items.filter(x=>!x.watched);
-  else if(currentWatchFilter==='watched')items=items.filter(x=>x.watched);
-  mc.innerHTML=`
-<div class="watch-filters">${['all','film','tv','unwatched','watched'].map(f=>`<button class="watch-filter${currentWatchFilter===f?' active':''}" onclick="setWatchFilter('${f}')">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`).join('')}</div>
-<div class="card">
-${items.length===0?`<div class="empty-state">Nothing here.</div>`:''}
-${items.map(w=>`
-<div class="watch-item">
-<span class="watch-type-badge ${w.type}">${w.type==='film'?'Film':'TV'}</span>
-<span class="watch-title${w.watched?' watched':''}">${escHtml(w.title)}</span>
-<button class="watch-check${w.watched?' watched':''}" onclick="toggleWatched('${w.id}')">${w.watched?'✓':''}</button>
-<button class="del-btn" onclick="deleteWatch('${w.id}')">✕</button>
-</div>`).join('')}
-<div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">
-<input class="add-input" id="watch-title" placeholder="Title…" style="flex:1;min-width:120px" onkeydown="if(event.key==='Enter')addWatch()" />
-<select class="mini" id="watch-type"><option value="film">Film</option><option value="tv">TV</option></select>
-<button class="add-btn" onclick="addWatch()">Add</button>
-</div>
-</div>
-<p style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:0.5rem">${data.watchlist.filter(w=>!w.watched).length} to watch · ${data.watchlist.filter(w=>w.watched).length} watched</p>`;
+  var mc=el('main-content');
+  var tabs='<div class="subtab-bar">'+
+    '<button class="subtab-btn'+(currentWatchSub==='movies'?' active':'')+'" onclick="setWatchSub(\'movies\')">🎞️ Movies</button>'+
+    '<button class="subtab-btn'+(currentWatchSub==='tv'?' active':'')+'" onclick="setWatchSub(\'tv\')">📺 TV</button>'+
+  '</div>';
+  mc.innerHTML=tabs+(currentWatchSub==='tv'?tvSectionHtml():moviesSectionHtml());
+}
+function setWatchSub(s){currentWatchSub=s;renderWatchlist();}
+
+function moviesSectionHtml(){
+  var all=data.watchlist.filter(function(x){return x.type==='film';});
+  var items=all;
+  if(currentWatchFilter==='unwatched')items=items.filter(function(x){return!x.watched;});
+  else if(currentWatchFilter==='watched')items=items.filter(function(x){return x.watched;});
+  var filterBtns=['all','unwatched','watched'].map(function(f){
+    return '<button class="watch-filter'+(currentWatchFilter===f?' active':'')+'" onclick="setWatchFilter(\''+f+'\')">'+f.charAt(0).toUpperCase()+f.slice(1)+'</button>';
+  }).join('');
+  var rows=items.map(function(w){
+    return '<div class="watch-item"><span class="watch-title'+(w.watched?' watched':'')+'">'+escHtml(w.title)+'</span>'+
+      '<button class="watch-check'+(w.watched?' watched':'')+'" onclick="toggleWatched(\''+w.id+'\')">'+(w.watched?'✓':'')+'</button>'+
+      '<button class="del-btn" onclick="deleteWatch(\''+w.id+'\')">✕</button></div>';
+  }).join('');
+  return '<div class="watch-filters">'+filterBtns+'</div><div class="card">'+
+    (items.length===0?'<div class="empty-state">Nothing here.</div>':'')+
+    rows+
+    '<div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">'+
+    '<input class="add-input" id="watch-title" placeholder="Title…" style="flex:1;min-width:120px" onkeydown="if(event.key===\'Enter\')addWatch()" />'+
+    '<button class="add-btn" onclick="addWatch()">Add</button>'+
+    '</div></div>'+
+    '<p style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:0.5rem">'+all.filter(function(x){return!x.watched;}).length+' to watch · '+all.filter(function(x){return x.watched;}).length+' watched</p>';
 }
 function setWatchFilter(f){currentWatchFilter=f;renderWatchlist();}
 function addWatch(){
-  const title=el('watch-title').value.trim();if(!title)return;
-  data.watchlist.push({id:uid(),title,type:el('watch-type').value,watched:false,added:realToday()});
+  var inp=el('watch-title');if(!inp)return;
+  var title=inp.value.trim();if(!title)return;
+  data.watchlist.push({id:uid(),title:title,type:'film',watched:false,added:realToday()});
   saveToDropbox();renderWatchlist();
 }
 function toggleWatched(id){const w=data.watchlist.find(x=>x.id===id);if(w){w.watched=!w.watched;saveToDropbox();renderWatchlist();}}
 function deleteWatch(id){data.watchlist=data.watchlist.filter(x=>x.id!==id);saveToDropbox();renderWatchlist();}
+
+// TV TRACKER
+function migrateTVWatchlist(){
+  if(data.settings.tvMigrated)return;
+  if(!data.tvshows)data.tvshows=[];
+  data.watchlist.forEach(function(w){
+    if(w.type==='tv'){
+      var exists=data.tvshows.some(function(s){return s.title===w.title;});
+      if(!exists)data.tvshows.push({id:uid(),title:w.title,toWatch:!w.watched,series:[]});
+    }
+  });
+  data.watchlist=data.watchlist.filter(function(w){return w.type!=='tv';});
+  data.settings.tvMigrated=true;
+  saveToDropbox();
+}
+
+function tvSectionHtml(){
+  if(!data.tvshows)data.tvshows=[];
+  var shows=data.tvshows.filter(function(s){return!s.toWatch;});
+  var toWatch=data.tvshows.filter(function(s){return s.toWatch;});
+  var html='<div class="section-title">Shows</div><div class="card">';
+  if(shows.length===0)html+='<div class="empty-state">No shows tracked yet. Add one below.</div>';
+  shows.forEach(function(s){html+=tvShowCardHtml(s);});
+  html+='<div class="proj-add-row"><input class="add-input" id="tv-show-input" placeholder="Show title…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTVShow()" /><button class="add-btn" onclick="addTVShow()">Add show</button></div>';
+  html+='</div>';
+  html+='<div class="section-title">To Watch</div><div class="card">';
+  if(toWatch.length===0)html+='<div class="empty-state">Nothing queued. Add a show you want to start below.</div>';
+  toWatch.forEach(function(s){
+    html+='<div class="watch-item"><span class="watch-title">'+escHtml(s.title)+'</span>'+
+      '<button class="add-btn secondary" onclick="startWatchingTV(\''+s.id+'\')">▶ Start</button>'+
+      '<button class="del-btn" onclick="deleteTVShow(\''+s.id+'\')">✕</button></div>';
+  });
+  html+='<div class="proj-add-row"><input class="add-input" id="tv-towatch-input" placeholder="Show to start later…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTVToWatch()" /><button class="add-btn" onclick="addTVToWatch()">Add</button></div>';
+  html+='</div>';
+  return html;
+}
+
+function tvShowCardHtml(s){
+  var totalEp=0,watchedEp=0;
+  (s.series||[]).forEach(function(sr){(sr.episodes||[]).forEach(function(e){totalEp++;if(e.watched)watchedEp++;});});
+  var pct=totalEp===0?0:Math.round(watchedEp/totalEp*100);
+  var isOpen=!!tvShowExpanded[s.id];
+  var html='<div class="proj-card" id="tvshow-'+s.id+'">';
+  html+='<div class="proj-header" onclick="tvToggleShow(\''+s.id+'\')">';
+  html+='<span class="proj-chevron'+(isOpen?' open':'')+'">▶</span>';
+  html+='<span class="proj-title">'+escHtml(s.title)+'</span>';
+  html+='<span class="proj-meta">'+watchedEp+'/'+totalEp+'</span>';
+  html+='<button class="opts-btn" onclick="event.stopPropagation();toggleOptsMenu(\'tvshow-'+s.id+'\',event)">⋮</button>';
+  html+='<div class="opts-menu" id="opts-tvshow-'+s.id+'" style="right:0;top:2rem">';
+  html+='<button onclick="renameTVShow(\''+s.id+'\')">✏️ Rename</button>';
+  html+='<button class="danger-opt" onclick="deleteTVShow(\''+s.id+'\')">🗑 Delete</button>';
+  html+='</div></div>';
+  html+='<div class="proj-progress-bar"><div class="proj-progress-fill" style="width:'+pct+'%"></div></div>';
+  if(isOpen){
+    html+='<div class="proj-tasks">';
+    if(!s.series||s.series.length===0)html+='<div class="empty-state" style="font-size:0.82rem;padding:0.5rem 0">No series yet.</div>';
+    (s.series||[]).forEach(function(sr){html+=tvSeriesHtml(s.id,sr);});
+    html+='<div class="proj-add-row"><input class="add-input" id="tv-series-input-'+s.id+'" placeholder="Series name (e.g. Series 1)…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTVSeries(\''+s.id+'\')" /><button class="add-btn" onclick="addTVSeries(\''+s.id+'\')">Add series</button></div>';
+    html+='</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+function tvSeriesHtml(showId,sr){
+  var eps=sr.episodes||[];
+  var watchedCount=eps.filter(function(e){return e.watched;}).length;
+  var isOpen=!!tvSeriesExpanded[sr.id];
+  var html='<div>';
+  html+='<div class="tv-series-row" onclick="tvToggleSeries(\''+sr.id+'\')">';
+  html+='<span class="proj-chevron'+(isOpen?' open':'')+'">▶</span>';
+  html+='<span class="tv-series-name">'+escHtml(sr.name)+'</span>';
+  html+='<span class="proj-meta">'+watchedCount+'/'+eps.length+'</span>';
+  html+='<button class="opts-btn" onclick="event.stopPropagation();toggleOptsMenu(\'tvseries-'+sr.id+'\',event)">⋮</button>';
+  html+='<div class="opts-menu" id="opts-tvseries-'+sr.id+'" style="right:0;top:1.8rem">';
+  html+='<button onclick="renameTVSeries(\''+showId+'\',\''+sr.id+'\')">✏️ Rename</button>';
+  html+='<button class="danger-opt" onclick="deleteTVSeries(\''+showId+'\',\''+sr.id+'\')">🗑 Delete</button>';
+  html+='</div></div>';
+  if(isOpen){
+    html+='<div class="tv-episodes">';
+    if(eps.length===0)html+='<div class="empty-state" style="font-size:0.8rem;padding:0.4rem 0">No episodes yet.</div>';
+    eps.forEach(function(e){
+      html+='<div class="proj-task-item">';
+      html+='<button class="proj-task-check'+(e.watched?' done':'')+'" onclick="toggleTVEpisode(\''+showId+'\',\''+sr.id+'\',\''+e.id+'\')">'+(e.watched?'✓':'')+'</button>';
+      html+='<span class="proj-task-text'+(e.watched?' done':'')+'">'+escHtml(e.label)+'</span>';
+      html+='<button class="del-btn" onclick="deleteTVEpisode(\''+showId+'\',\''+sr.id+'\',\''+e.id+'\')">✕</button>';
+      html+='</div>';
+    });
+    html+='<div class="proj-add-row"><input class="add-input" id="tv-ep-input-'+sr.id+'" placeholder="Episode (e.g. E5 or a name)…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTVEpisode(\''+showId+'\',\''+sr.id+'\')" /><button class="add-btn" onclick="addTVEpisode(\''+showId+'\',\''+sr.id+'\')">Add</button></div>';
+    html+='</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
+function tvToggleShow(id){tvShowExpanded[id]=!tvShowExpanded[id];renderWatchlist();}
+function tvToggleSeries(id){tvSeriesExpanded[id]=!tvSeriesExpanded[id];renderWatchlist();}
+
+function addTVShow(){
+  var inp=el('tv-show-input');if(!inp)return;
+  var title=inp.value.trim();if(!title)return;
+  var s={id:uid(),title:title,toWatch:false,series:[]};
+  data.tvshows.push(s);
+  tvShowExpanded[s.id]=true;
+  saveToDropbox();renderWatchlist();
+}
+function addTVToWatch(){
+  var inp=el('tv-towatch-input');if(!inp)return;
+  var title=inp.value.trim();if(!title)return;
+  data.tvshows.push({id:uid(),title:title,toWatch:true,series:[]});
+  saveToDropbox();renderWatchlist();
+}
+function startWatchingTV(id){
+  var s=data.tvshows.find(function(x){return x.id===id;});if(!s)return;
+  s.toWatch=false;
+  tvShowExpanded[id]=true;
+  saveToDropbox();renderWatchlist();showToast('Moved to Shows ✓');
+}
+function deleteTVShow(id){
+  if(!confirm('Delete this show and all its series/episodes?'))return;
+  data.tvshows=data.tvshows.filter(function(x){return x.id!==id;});
+  delete tvShowExpanded[id];
+  saveToDropbox();renderWatchlist();
+}
+function renameTVShow(id){
+  var s=data.tvshows.find(function(x){return x.id===id;});if(!s)return;
+  var name=prompt('Rename show',s.title);if(!name)return;
+  s.title=name.trim()||s.title;
+  saveToDropbox();renderWatchlist();
+}
+function addTVSeries(showId){
+  var inp=el('tv-series-input-'+showId);if(!inp)return;
+  var name=inp.value.trim();if(!name)return;
+  var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
+  if(!s.series)s.series=[];
+  var sr={id:uid(),name:name,episodes:[]};
+  s.series.push(sr);
+  tvSeriesExpanded[sr.id]=true;
+  saveToDropbox();renderWatchlist();
+}
+function renameTVSeries(showId,seriesId){
+  var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
+  var sr=(s.series||[]).find(function(x){return x.id===seriesId;});if(!sr)return;
+  var name=prompt('Rename series',sr.name);if(!name)return;
+  sr.name=name.trim()||sr.name;
+  saveToDropbox();renderWatchlist();
+}
+function deleteTVSeries(showId,seriesId){
+  if(!confirm('Delete this series and all its episodes?'))return;
+  var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
+  s.series=(s.series||[]).filter(function(x){return x.id!==seriesId;});
+  delete tvSeriesExpanded[seriesId];
+  saveToDropbox();renderWatchlist();
+}
+function addTVEpisode(showId,seriesId){
+  var inp=el('tv-ep-input-'+seriesId);if(!inp)return;
+  var label=inp.value.trim();if(!label)return;
+  var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
+  var sr=(s.series||[]).find(function(x){return x.id===seriesId;});if(!sr)return;
+  if(!sr.episodes)sr.episodes=[];
+  sr.episodes.push({id:uid(),label:label,watched:false});
+  saveToDropbox();renderWatchlist();
+}
+function toggleTVEpisode(showId,seriesId,epId){
+  var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
+  var sr=(s.series||[]).find(function(x){return x.id===seriesId;});if(!sr)return;
+  var e=(sr.episodes||[]).find(function(x){return x.id===epId;});if(!e)return;
+  e.watched=!e.watched;
+  saveToDropbox();renderWatchlist();
+}
+function deleteTVEpisode(showId,seriesId,epId){
+  var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
+  var sr=(s.series||[]).find(function(x){return x.id===seriesId;});if(!sr)return;
+  sr.episodes=(sr.episodes||[]).filter(function(x){return x.id!==epId;});
+  saveToDropbox();renderWatchlist();
+}
 
 // WEIGHT
 function bmiFromWeight(kg){const h=data.weight.heightCm;if(!h)return null;return (kg/((h/100)**2)).toFixed(1);}
@@ -1387,7 +1583,7 @@ function renderSettings(){
   const mc=el('main-content');
   const theme=localStorage.getItem('theme')||'dark';
   const bh=data.settings.journalBoundaryHour||0;
-  var historyRows=CHANGELOG.map(function(c){return '<div class="settings-row" style="align-items:flex-start;flex-direction:column;gap:0.15rem"><div class="settings-label">v'+c.v+' — '+c.date+'</div><div class="settings-sub">'+c.notes+'</div></div>';}).join('<div style="height:0.6rem"></div>');
+  const currentVer=CHANGELOG[0]?CHANGELOG[0].v:'';
   mc.innerHTML=`
 <div class="section-title" style="margin-top:0">Appearance</div>
 <div class="card">
@@ -1428,10 +1624,18 @@ ${[0,1,2,3,4,5,6].map(h=>`<option value="${h}"${bh===h?' selected':''}>${h===0?'
 <button class="add-btn secondary" onclick="syncDropbox()">↻ Sync</button>
 </div>
 </div>
-<div class="section-title">Update History</div>
-<div class="card">
-${historyRows}
+<div style="display:flex;align-items:center;justify-content:center;gap:0.75rem;margin-top:1.25rem;font-size:0.78rem;color:var(--muted)">
+<span>V${currentVer}</span>
+<button class="add-btn secondary" onclick="renderUpdateHistory()">History</button>
 </div>`;
+}
+function renderUpdateHistory(){
+  var mc=el('main-content');
+  var current=CHANGELOG[0]?CHANGELOG[0].v:'';
+  var rows=CHANGELOG.map(function(c){return '<div class="settings-row" style="align-items:flex-start;flex-direction:column;gap:0.15rem"><div class="settings-label">v'+c.v+' — '+c.date+'</div><div class="settings-sub">'+c.notes+'</div></div>';}).join('<div style="height:0.6rem"></div>');
+  mc.innerHTML='<button class="add-btn secondary" onclick="renderSettings()" style="margin-bottom:0.75rem">‹ Back</button>'+
+    '<div class="section-title" style="margin-top:0">Update History - v'+current+'</div>'+
+    '<div class="card">'+rows+'</div>';
 }
 function setBoundary(v){data.settings.journalBoundaryHour=parseInt(v);saveToDropbox();}
 function setPinTimeout(v){data.settings.pinTimeoutMins=parseInt(v);saveToDropbox();resetInactivityTimer();showToast('Timeout updated ✓');}
@@ -1443,7 +1647,7 @@ function showApp(){
   const savedTheme=localStorage.getItem('theme')||'dark';
   document.documentElement.setAttribute('data-theme',savedTheme);
   showTab('home');
-  loadFromDropbox().then(()=>renderTab());
+  loadFromDropbox().then(()=>{migrateTVWatchlist();renderTab();});
   resetInactivityTimer();
 }
 
@@ -1456,7 +1660,7 @@ async function init(){
   const cached=localStorage.getItem('dbx_cache');
   if(cached)try{
     const p=JSON.parse(cached);
-    ['tasks','birthdays','journal','watchlist','shopping','projects'].forEach(k=>{if(p[k])data[k]=p[k];});
+    ['tasks','birthdays','journal','watchlist','shopping','projects','tvshows'].forEach(k=>{if(p[k])data[k]=p[k];});
     if(p.statements)data.statements=p.statements;
     if(p.weight)data.weight={...data.weight,...p.weight};
     if(p.settings)data.settings={...data.settings,...p.settings};
