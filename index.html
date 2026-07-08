@@ -358,6 +358,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'4.0',date:'8 Jul 2026',notes:'Local backup/export in Settings — view, copy, or download your data as a file, entirely offline with no Dropbox calls'},
   {v:'3.0',date:'7 Jul 2026',notes:'TV tracker (shows → series → episodes, tickable) with a To Watch list, Update History moved to its own page, Birthdays "Today" section + same-day sort fix'},
   {v:'2.0',date:'5 Jul 2026',notes:'End of Day due-highlighting + smart confirm, local-timezone date fix, background service worker, version history'},
   {v:'1.0',date:'—',notes:'Baseline — all modules built prior to version tracking (Home, To Do, Projects, Statements, Journal, Watch list, Weight, Shopping, Birthdays, Settings)'}
@@ -1617,6 +1618,13 @@ ${[0,1,2,3,4,5,6].map(h=>`<option value="${h}"${bh===h?' selected':''}>${h===0?'
 </select>
 </div>
 </div>
+<div class="section-title">Backup</div>
+<div class="card">
+<div class="settings-row">
+<div><div class="settings-label">View / copy your data</div><div class="settings-sub">Shows exactly what's currently stored on this device — no internet or Dropbox needed</div></div>
+<button class="add-btn secondary" onclick="renderBackup()">View</button>
+</div>
+</div>
 <div class="section-title">Data</div>
 <div class="card">
 <div class="settings-row">
@@ -1637,8 +1645,43 @@ function renderUpdateHistory(){
     '<div class="section-title" style="margin-top:0">Update History - v'+current+'</div>'+
     '<div class="card">'+rows+'</div>';
 }
-function setBoundary(v){data.settings.journalBoundaryHour=parseInt(v);saveToDropbox();}
+function renderBackup(){
+  var mc=el('main-content');
+  var json=JSON.stringify(data,null,2);
+  var totalTasks=data.tasks.length;
+  var doneTasks=data.tasks.filter(function(t){return t.done;}).length;
+  var summary='Tasks: '+totalTasks+' ('+doneTasks+' done) · Birthdays: '+data.birthdays.length+' · Journal entries: '+data.journal.length+' · Shopping: '+data.shopping.length+' · Projects: '+(data.projects||[]).length+' · TV shows: '+(data.tvshows||[]).length+' · Watch list: '+data.watchlist.length+' · Weight logs: '+data.weight.entries.length+' · Statement accounts: '+data.statements.accounts.length;
+  mc.innerHTML='<button class="add-btn secondary" onclick="renderSettings()" style="margin-bottom:0.75rem">‹ Back</button>'+
+    '<div class="section-title" style="margin-top:0">Your data on this device</div>'+
+    '<div class="card">'+
+    '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem">'+summary+'</div>'+
+    '<div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.6rem">This is read directly from this device — it never contacts Dropbox. Safe to view even if sync is broken.</div>'+
+    '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem">'+
+    '<button class="add-btn" onclick="copyBackup()">📋 Copy to clipboard</button>'+
+    '<button class="add-btn secondary" onclick="downloadBackup()">⬇ Download as file</button>'+
+    '</div>'+
+    '<textarea id="backup-text" readonly style="width:100%;height:300px;font-family:monospace;font-size:0.7rem;background:var(--card2,var(--card));color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.6rem;box-sizing:border-box">'+escHtml(json)+'</textarea>'+
+    '</div>';
+}
+function copyBackup(){
+  var ta=el('backup-text');if(!ta)return;
+  ta.select();ta.setSelectionRange(0,999999);
+  try{
+    navigator.clipboard.writeText(ta.value).then(function(){showToast('Copied ✓');}).catch(function(){document.execCommand('copy');showToast('Copied ✓');});
+  }catch(e){document.execCommand('copy');showToast('Copied ✓');}
+}
+function downloadBackup(){
+  var json=JSON.stringify(data,null,2);
+  var blob=new Blob([json],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='phillsadmin-backup-'+realToday()+'.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Downloaded ✓');
+}
 function setPinTimeout(v){data.settings.pinTimeoutMins=parseInt(v);saveToDropbox();resetInactivityTimer();showToast('Timeout updated ✓');}
+function setBoundary(v){data.settings.journalBoundaryHour=parseInt(v);saveToDropbox();}
 
 // SHOW APP
 function showApp(){
