@@ -358,6 +358,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'5.0',date:'8 Jul 2026',notes:'Fixed silent Dropbox sync failures — the app now detects expired connections and failed saves instead of quietly ignoring them, plus a real "Reconnect" button and live connection status in Settings'},
   {v:'4.0',date:'8 Jul 2026',notes:'Local backup/export in Settings — view, copy, or download your data as a file, entirely offline with no Dropbox calls'},
   {v:'3.0',date:'7 Jul 2026',notes:'TV tracker (shows → series → episodes, tickable) with a To Watch list, Update History moved to its own page, Birthdays "Today" section + same-day sort fix'},
   {v:'2.0',date:'5 Jul 2026',notes:'End of Day due-highlighting + smart confirm, local-timezone date fix, background service worker, version history'},
@@ -405,29 +406,50 @@ function handleOAuthCallback(){
   if(token){localStorage.setItem('dbx_token',token);window.history.replaceState({},'',window.location.pathname);return token;}
   return null;
 }
+let dropboxStatus='ok',dropboxStatusTime=null;
+function markDropboxOk(){dropboxStatus='ok';dropboxStatusTime=new Date();}
+function markDropboxExpired(){
+  dropboxStatus='expired';dropboxStatusTime=new Date();
+  localStorage.removeItem('dbx_token');accessToken=null;
+  showToast('⚠ Dropbox connection expired — reconnect in Settings');
+}
+function markDropboxFailed(msg){dropboxStatus='failed';dropboxStatusTime=new Date();showToast(msg||'⚠ Dropbox sync failed');}
+
 async function loadFromDropbox(){
   try{
     const res=await fetch('https://content.dropboxapi.com/2/files/download',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Dropbox-API-Arg':JSON.stringify({path:DATA_FILE})}});
+    if(res.status===401){markDropboxExpired();return;}
     if(res.status===409){await saveToDropbox();return;}
+    if(!res.ok){markDropboxFailed('⚠ Could not reach Dropbox — kept the data already on this device');return;}
     const json=await res.json();
+    const looksValid=json&&typeof json==='object'&&(json.tasks||json.birthdays||json.settings||json.journal);
+    if(!looksValid){markDropboxFailed('⚠ Dropbox returned unexpected data — kept the data already on this device');return;}
     ['tasks','birthdays','journal','watchlist','shopping','projects','tvshows'].forEach(k=>{if(json[k])data[k]=json[k];});
     if(json.statements)data.statements=json.statements;
     if(json.weight)data.weight={...data.weight,...json.weight};
     if(json.settings)data.settings={...data.settings,...json.settings};
     localStorage.setItem('dbx_cache',JSON.stringify(data));
+    markDropboxOk();
   }catch(e){
     const c=localStorage.getItem('dbx_cache');
     if(c)try{data=JSON.parse(c);}catch(e2){}
-    showToast('Offline — using cached data');
+    markDropboxFailed('⚠ Offline — using cached data');
   }
 }
 async function saveToDropbox(){
   try{
-    await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Dropbox-API-Arg':JSON.stringify({path:DATA_FILE,mode:'overwrite',autorename:false}),'Content-Type':'application/octet-stream'},body:new Blob([JSON.stringify(data,null,2)],{type:'application/json'})});
+    const res=await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{'Authorization':`Bearer ${accessToken}`,'Dropbox-API-Arg':JSON.stringify({path:DATA_FILE,mode:'overwrite',autorename:false}),'Content-Type':'application/octet-stream'},body:new Blob([JSON.stringify(data,null,2)],{type:'application/json'})});
+    if(res.status===401){markDropboxExpired();return;}
+    if(!res.ok){markDropboxFailed('⚠ Save failed — check your connection');return;}
     localStorage.setItem('dbx_cache',JSON.stringify(data));
-  }catch(e){showToast('Save failed — check connection');}
+    markDropboxOk();
+  }catch(e){markDropboxFailed('⚠ Save failed — check your connection');}
 }
-async function syncDropbox(){await loadFromDropbox();renderTab();showToast('Synced ✓');}
+async function syncDropbox(){await loadFromDropbox();renderTab();if(dropboxStatus==='ok')showToast('Synced ✓');}
+function reconnectDropbox(){
+  localStorage.removeItem('dbx_token');
+  startDropboxAuth();
+}
 
 
 // PIN LOCK
@@ -1585,8 +1607,17 @@ function renderSettings(){
   const theme=localStorage.getItem('theme')||'dark';
   const bh=data.settings.journalBoundaryHour||0;
   const currentVer=CHANGELOG[0]?CHANGELOG[0].v:'';
+  const statusLabel=dropboxStatus==='ok'?'✅ Connected':dropboxStatus==='expired'?'⚠ Disconnected — needs reconnecting':'⚠ Last attempt failed';
+  const statusTime=dropboxStatusTime?dropboxStatusTime.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'—';
   mc.innerHTML=`
-<div class="section-title" style="margin-top:0">Appearance</div>
+<div class="section-title" style="margin-top:0">Connection</div>
+<div class="card">
+<div class="settings-row">
+<div><div class="settings-label">${statusLabel}</div><div class="settings-sub">Last checked ${statusTime}</div></div>
+${dropboxStatus!=='ok'?'<button class="add-btn" onclick="reconnectDropbox()">Reconnect</button>':'<button class="add-btn secondary" onclick="syncDropbox()">↻ Sync</button>'}
+</div>
+</div>
+<div class="section-title">Appearance</div>
 <div class="card">
 <div class="theme-swatches">
 <button class="theme-swatch${theme==='dark'?' active':''}" onclick="setTheme('dark');renderSettings()"><div class="theme-swatch-dot" style="background:#1a1a2e;border:1px solid #444"></div><div class="theme-swatch-label">Dark</div></button>
