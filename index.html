@@ -95,6 +95,9 @@ main{flex:1;overflow-y:auto;padding:1rem;}
 select.mini{background:var(--input-bg);border:1px solid var(--border);color:var(--text);padding:0.3rem 0.4rem;border-radius:var(--radius-sm);font-family:var(--font);font-size:0.78rem;outline:none;}
 .home-greeting{font-size:1.3rem;font-weight:600;letter-spacing:-0.02em;margin-bottom:0.25rem;}
 .home-date{font-size:0.8rem;color:var(--muted);margin-bottom:1.25rem;}
+.home-header-row{display:flex;justify-content:space-between;align-items:flex-start;}
+.home-edit-btn{background:none;border:1px solid var(--border);color:var(--muted);font-family:var(--font);font-size:0.75rem;padding:0.3rem 0.7rem;border-radius:999px;cursor:pointer;margin-top:0.15rem;}
+.home-tile-editing{outline:1px dashed var(--border);}
 .home-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;}
 .home-tile{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:0.875rem;cursor:pointer;position:relative;overflow:hidden;}
 .home-tile-icon{font-size:1.4rem;margin-bottom:0.4rem;}
@@ -355,12 +358,13 @@ input[type="date"]{color-scheme:dark;}
 <script>
 const DROPBOX_APP_KEY='kg70xibrafahre2';
 const REDIRECT_URI='https://philltowns.github.io/PhillsAdmin/';
-const DATA_FILE='/PhillsAdmin/data.json';
+const DATA_FILE='/data.json';
 const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24','#fb923c','#f472b6','#e879f9','#38bdf8','#4ade80','#facc15'];
 
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'5.2',date:'8 Jul 2026',notes:'Home dashboard gets a subtle Edit mode for rearranging tiles (drag handles hidden otherwise), accurate overdue-statement count on the Home tile, fixed the doubled Dropbox folder path'},
   {v:'5.1',date:'8 Jul 2026',notes:'Drag-to-reorder for Home dashboard tiles and TV shows/series, removed the redundant Data/Sync section in Settings (Connection covers it)'},
   {v:'5.0',date:'8 Jul 2026',notes:'Fixed silent Dropbox sync failures — the app now detects expired connections and failed saves instead of quietly ignoring them, plus a real "Reconnect" button and live connection status in Settings'},
   {v:'4.0',date:'8 Jul 2026',notes:'Local backup/export in Settings — view, copy, or download your data as a file, entirely offline with no Dropbox calls'},
@@ -586,6 +590,8 @@ function getHomeTileOrder(){
   HOME_TILE_ORDER_DEFAULT.forEach(function(k){if(valid.indexOf(k)===-1)valid.push(k);});
   return valid;
 }
+var homeEditMode=false;
+function toggleHomeEdit(){homeEditMode=!homeEditMode;renderHome();}
 function renderHome(){
   const mc=el('main-content');
   const now=new Date();
@@ -594,8 +600,7 @@ function renderHome(){
   const todayTasks=data.tasks.filter(t=>t.bucket==='today');
   const doneTasks=todayTasks.filter(t=>t.done).length;
   const dueBdays=data.birthdays.filter(b=>daysUntil(b.mmdd)<=28);
-  const nowYM=realToday().slice(0,7);
-  const dueStmts=data.statements.accounts.filter(a=>isStmtDue(a,nowYM)&&!data.statements.months[`${a.id}_${nowYM}`]);
+  const dueStmts=getOverdueStatements();
   const latestW=[...data.weight.entries].sort((a,b)=>b.date.localeCompare(a.date))[0];
   const unwatched=data.watchlist.filter(w=>!w.watched).length+(data.tvshows?data.tvshows.filter(s=>s.toWatch).length:0);
   const shopLeft=data.shopping.filter(s=>!s.done).length;
@@ -614,15 +619,17 @@ function renderHome(){
   var order=getHomeTileOrder();
   var tiles=order.map(function(key,i){
     var d=tileDefs[key];if(!d)return'';
-    return '<div class="home-tile" draggable="true" data-idx="'+i+'" data-key="'+key+'" data-nav="'+key+'" onclick="homeTileClick(this,\''+key+'\')"><span class="home-tile-drag-handle">⠿</span><div class="home-tile-accent"></div><div class="home-tile-icon">'+d.icon+'</div><div class="home-tile-name">'+d.name+'</div><div class="home-tile-summary">'+d.summary+'</div></div>';
+    var handle=homeEditMode?'<span class="home-tile-drag-handle">⠿</span>':'';
+    var drag=homeEditMode?' draggable="true"':'';
+    var editCls=homeEditMode?' home-tile-editing':'';
+    return '<div class="home-tile'+editCls+'"'+drag+' data-idx="'+i+'" data-key="'+key+'" data-nav="'+key+'" onclick="homeTileClick(this,\''+key+'\')">'+handle+'<div class="home-tile-accent"></div><div class="home-tile-icon">'+d.icon+'</div><div class="home-tile-name">'+d.name+'</div><div class="home-tile-summary">'+d.summary+'</div></div>';
   }).join('');
   mc.innerHTML=`
-<div class="home-greeting">Good ${greeting()}, Phill</div>
-<div class="home-date">${dayName}, ${dateLabel}</div>
+<div class="home-header-row"><div><div class="home-greeting">Good ${greeting()}, Phill</div><div class="home-date">${dayName}, ${dateLabel}</div></div><button class="home-edit-btn" onclick="toggleHomeEdit()">${homeEditMode?'✓ Done':'✎ Edit'}</button></div>
 <div class="home-grid">${tiles}</div>`;
-  attachHomeDragHandlers();
+  if(homeEditMode)attachHomeDragHandlers();
 }
-function homeTileClick(node,key){if(node.getAttribute('data-dragging')==='1')return;showTab(key);}
+function homeTileClick(node,key){if(homeEditMode)return;showTab(key);}
 var homeDragSrcIdx=null;
 function attachHomeDragHandlers(){
   document.querySelectorAll('.home-tile[draggable]').forEach(function(node){
@@ -1064,6 +1071,11 @@ function getMonthCols(){
   return cols;
 }
 function monthLabel(ym){const[y,m]=ym.split('-');return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'short',year:'2-digit'});}
+function getOverdueStatements(){
+  var cols=getMonthCols();var due=[];
+  cols.forEach(function(c){data.statements.accounts.forEach(function(a){if(isStmtDue(a,c)&&!data.statements.months[a.id+'_'+c]){due.push({name:a.name,ym:c});}});});
+  return due;
+}
 function isStmtDueCal(acct,ym){
   const freq=acct.frequencyMonths||1;
   if(freq===1)return true;
@@ -1102,7 +1114,7 @@ function renderStatements(){
   var mc=el('main-content');
   var cols=getMonthCols();var nowYM=realToday().slice(0,7);
   var accounts=[].concat(data.statements.accounts).sort(function(a,b){return a.dueDay-b.dueDay;});
-  var due=[];cols.forEach(function(c){accounts.forEach(function(a){if(isStmtDue(a,c)&&!data.statements.months[a.id+'_'+c]){due.push({name:a.name,ym:c});}});});
+  var due=getOverdueStatements();
   var colHeaders=cols.map(function(c){return'<th class="stmt-cell"'+(c===nowYM?' style="color:var(--module-color)"':'')+'>'+monthLabel(c)+'</th>';}).join('');
   var banner='';
   if(due.length){banner='<div class="due-banner"><div class="due-banner-title">⚠ Statements to check</div>'+due.map(function(d){return'<div style="font-size:0.83rem">'+escHtml(d.name)+(d.ym!==nowYM?' <span style="opacity:0.7">('+monthLabel(d.ym)+')</span>':'')+'</div>';}).join('')+'</div>';}
