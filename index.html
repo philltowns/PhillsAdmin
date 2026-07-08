@@ -256,6 +256,9 @@ input[type="date"]{color-scheme:dark;}
 .proj-archived-toggle{text-align:center;margin-bottom:0.75rem;}
 .task-drag-handle{color:var(--muted);font-size:1rem;padding:0 0.3rem 0 0;cursor:grab;flex-shrink:0;touch-action:none;}
 .task-item.drag-over{border-top:2px solid var(--module-color);}
+.home-tile-drag-handle{position:absolute;top:0.5rem;right:0.6rem;color:var(--muted);font-size:0.9rem;cursor:grab;touch-action:none;opacity:0.55;z-index:2;}
+.home-tile.drag-over{outline:2px solid var(--module-color);outline-offset:-2px;}
+.tv-series-row.drag-over,.proj-card.drag-over{outline:2px solid var(--module-color);outline-offset:-2px;}
 .home-tile[data-nav="projects"] .home-tile-accent{background:#8b5cf6;}
 [data-theme="light"] input[type="date"],[data-theme="rainbow"] input[type="date"],[data-theme="spectrum"] input[type="date"]{color-scheme:light;}
 </style>
@@ -358,6 +361,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'5.1',date:'8 Jul 2026',notes:'Drag-to-reorder for Home dashboard tiles and TV shows/series, removed the redundant Data/Sync section in Settings (Connection covers it)'},
   {v:'5.0',date:'8 Jul 2026',notes:'Fixed silent Dropbox sync failures — the app now detects expired connections and failed saves instead of quietly ignoring them, plus a real "Reconnect" button and live connection status in Settings'},
   {v:'4.0',date:'8 Jul 2026',notes:'Local backup/export in Settings — view, copy, or download your data as a file, entirely offline with no Dropbox calls'},
   {v:'3.0',date:'7 Jul 2026',notes:'TV tracker (shows → series → episodes, tickable) with a To Watch list, Update History moved to its own page, Birthdays "Today" section + same-day sort fix'},
@@ -574,6 +578,14 @@ function renderTab(){
 }
 
 // HOME
+const HOME_TILE_ORDER_DEFAULT=['todo','projects','shopping','birthdays','statements','journal','watchlist','weight'];
+function getHomeTileOrder(){
+  var saved=data.settings.homeTileOrder;
+  if(!Array.isArray(saved)||saved.length===0)return HOME_TILE_ORDER_DEFAULT.slice();
+  var valid=saved.filter(function(k){return HOME_TILE_ORDER_DEFAULT.indexOf(k)!==-1;});
+  HOME_TILE_ORDER_DEFAULT.forEach(function(k){if(valid.indexOf(k)===-1)valid.push(k);});
+  return valid;
+}
 function renderHome(){
   const mc=el('main-content');
   const now=new Date();
@@ -589,19 +601,55 @@ function renderHome(){
   const shopLeft=data.shopping.filter(s=>!s.done).length;
   const activeProjects=(data.projects||[]).filter(p=>!p.archived);
   const projSummary=activeProjects.length===0?'No active projects':activeProjects.length+' active project'+(activeProjects.length!==1?'s':'');
+  const tileDefs={
+    todo:{icon:'✅',name:'To Do',summary:todayTasks.length===0?'No tasks today':doneTasks+'/'+todayTasks.length+' done today'},
+    projects:{icon:'📁',name:'Projects',summary:projSummary},
+    shopping:{icon:'🛒',name:'Shopping',summary:shopLeft===0?'List is clear':shopLeft+' item'+(shopLeft!==1?'s':'')+' to get'},
+    birthdays:{icon:'🎂',name:'Birthdays',summary:dueBdays.length===0?'None in 4 weeks':dueBdays.length+' in next 4 weeks'},
+    statements:{icon:'🏦',name:'Statements',summary:dueStmts.length===0?'All up to date':dueStmts.length+' to check'},
+    journal:{icon:'✨',name:'Journal',summary:data.journal.find(e=>e.date===todayStr())?'Entry logged today':'Nothing logged yet today'},
+    watchlist:{icon:'🎬',name:'Watch list',summary:unwatched===0?'All watched':unwatched+' to watch'},
+    weight:{icon:'⚖️',name:'Weight',summary:latestW?'Last: '+latestW.kg+' kg on '+fmtDate(latestW.date):'No entries yet'}
+  };
+  var order=getHomeTileOrder();
+  var tiles=order.map(function(key,i){
+    var d=tileDefs[key];if(!d)return'';
+    return '<div class="home-tile" draggable="true" data-idx="'+i+'" data-key="'+key+'" data-nav="'+key+'" onclick="homeTileClick(this,\''+key+'\')"><span class="home-tile-drag-handle">⠿</span><div class="home-tile-accent"></div><div class="home-tile-icon">'+d.icon+'</div><div class="home-tile-name">'+d.name+'</div><div class="home-tile-summary">'+d.summary+'</div></div>';
+  }).join('');
   mc.innerHTML=`
 <div class="home-greeting">Good ${greeting()}, Phill</div>
 <div class="home-date">${dayName}, ${dateLabel}</div>
-<div class="home-grid">
-<div class="home-tile" onclick="showTab('todo')" data-nav="todo"><div class="home-tile-accent"></div><div class="home-tile-icon">✅</div><div class="home-tile-name">To Do</div><div class="home-tile-summary">${todayTasks.length===0?'No tasks today':doneTasks+'/'+todayTasks.length+' done today'}</div></div>
-<div class="home-tile" onclick="showTab('projects')" data-nav="projects"><div class="home-tile-accent"></div><div class="home-tile-icon">📁</div><div class="home-tile-name">Projects</div><div class="home-tile-summary">${projSummary}</div></div>
-<div class="home-tile" onclick="showTab('shopping')" data-nav="shopping"><div class="home-tile-accent"></div><div class="home-tile-icon">🛒</div><div class="home-tile-name">Shopping</div><div class="home-tile-summary">${shopLeft===0?'List is clear':shopLeft+' item'+(shopLeft!==1?'s':'')+' to get'}</div></div>
-<div class="home-tile" onclick="showTab('birthdays')" data-nav="birthdays"><div class="home-tile-accent"></div><div class="home-tile-icon">🎂</div><div class="home-tile-name">Birthdays</div><div class="home-tile-summary">${dueBdays.length===0?'None in 4 weeks':dueBdays.length+' in next 4 weeks'}</div></div>
-<div class="home-tile" onclick="showTab('statements')" data-nav="statements"><div class="home-tile-accent"></div><div class="home-tile-icon">🏦</div><div class="home-tile-name">Statements</div><div class="home-tile-summary">${dueStmts.length===0?'All up to date':dueStmts.length+' to check'}</div></div>
-<div class="home-tile" onclick="showTab('journal')" data-nav="journal"><div class="home-tile-accent"></div><div class="home-tile-icon">✨</div><div class="home-tile-name">Journal</div><div class="home-tile-summary">${data.journal.find(e=>e.date===todayStr())?'Entry logged today':'Nothing logged yet today'}</div></div>
-<div class="home-tile" onclick="showTab('watchlist')" data-nav="watchlist"><div class="home-tile-accent"></div><div class="home-tile-icon">🎬</div><div class="home-tile-name">Watch list</div><div class="home-tile-summary">${unwatched===0?'All watched':unwatched+' to watch'}</div></div>
-<div class="home-tile" onclick="showTab('weight')" data-nav="weight"><div class="home-tile-accent"></div><div class="home-tile-icon">⚖️</div><div class="home-tile-name">Weight</div><div class="home-tile-summary">${latestW?'Last: '+latestW.kg+' kg on '+fmtDate(latestW.date):'No entries yet'}</div></div>
-</div>`;
+<div class="home-grid">${tiles}</div>`;
+  attachHomeDragHandlers();
+}
+function homeTileClick(node,key){if(node.getAttribute('data-dragging')==='1')return;showTab(key);}
+var homeDragSrcIdx=null;
+function attachHomeDragHandlers(){
+  document.querySelectorAll('.home-tile[draggable]').forEach(function(node){
+    node.addEventListener('dragstart',function(e){
+      homeDragSrcIdx=parseInt(this.getAttribute('data-idx'));
+      e.dataTransfer.effectAllowed='move';
+      this.style.opacity='0.5';
+      this.setAttribute('data-dragging','1');
+    });
+    node.addEventListener('dragend',function(){
+      this.style.opacity='';this.removeAttribute('data-dragging');
+      document.querySelectorAll('.home-tile').forEach(function(n){n.classList.remove('drag-over');});
+    });
+    node.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect='move';this.classList.add('drag-over');});
+    node.addEventListener('dragleave',function(){this.classList.remove('drag-over');});
+    node.addEventListener('drop',function(e){
+      e.preventDefault();this.classList.remove('drag-over');
+      var toIdx=parseInt(this.getAttribute('data-idx'));
+      if(homeDragSrcIdx===null||homeDragSrcIdx===toIdx)return;
+      var order=getHomeTileOrder();
+      var moved=order.splice(homeDragSrcIdx,1)[0];
+      order.splice(toIdx,0,moved);
+      data.settings.homeTileOrder=order;
+      homeDragSrcIdx=null;
+      saveToDropbox();renderHome();
+    });
+  });
 }
 
 // TO DO
@@ -1257,6 +1305,7 @@ function renderWatchlist(){
     '<button class="subtab-btn'+(currentWatchSub==='tv'?' active':'')+'" onclick="setWatchSub(\'tv\')">📺 TV</button>'+
   '</div>';
   mc.innerHTML=tabs+(currentWatchSub==='tv'?tvSectionHtml():moviesSectionHtml());
+  if(currentWatchSub==='tv')attachTVDragHandlers();
 }
 function setWatchSub(s){currentWatchSub=s;renderWatchlist();}
 
@@ -1313,7 +1362,7 @@ function tvSectionHtml(){
   var toWatch=data.tvshows.filter(function(s){return s.toWatch;});
   var html='<div class="section-title">Shows</div><div class="card">';
   if(shows.length===0)html+='<div class="empty-state">No shows tracked yet. Add one below.</div>';
-  shows.forEach(function(s){html+=tvShowCardHtml(s);});
+  shows.forEach(function(s,i){html+=tvShowCardHtml(s,i);});
   html+='<div class="proj-add-row"><input class="add-input" id="tv-show-input" placeholder="Show title…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTVShow()" /><button class="add-btn" onclick="addTVShow()">Add show</button></div>';
   html+='</div>';
   html+='<div class="section-title">To Watch</div><div class="card">';
@@ -1328,13 +1377,14 @@ function tvSectionHtml(){
   return html;
 }
 
-function tvShowCardHtml(s){
+function tvShowCardHtml(s,idx){
   var totalEp=0,watchedEp=0;
   (s.series||[]).forEach(function(sr){(sr.episodes||[]).forEach(function(e){totalEp++;if(e.watched)watchedEp++;});});
   var pct=totalEp===0?0:Math.round(watchedEp/totalEp*100);
   var isOpen=!!tvShowExpanded[s.id];
-  var html='<div class="proj-card" id="tvshow-'+s.id+'">';
+  var html='<div class="proj-card tv-show-card" draggable="true" data-idx="'+idx+'" id="tvshow-'+s.id+'">';
   html+='<div class="proj-header" onclick="tvToggleShow(\''+s.id+'\')">';
+  html+='<span class="task-drag-handle">⠿</span>';
   html+='<span class="proj-chevron'+(isOpen?' open':'')+'">▶</span>';
   html+='<span class="proj-title">'+escHtml(s.title)+'</span>';
   html+='<span class="proj-meta">'+watchedEp+'/'+totalEp+'</span>';
@@ -1347,7 +1397,7 @@ function tvShowCardHtml(s){
   if(isOpen){
     html+='<div class="proj-tasks">';
     if(!s.series||s.series.length===0)html+='<div class="empty-state" style="font-size:0.82rem;padding:0.5rem 0">No series yet.</div>';
-    (s.series||[]).forEach(function(sr){html+=tvSeriesHtml(s.id,sr);});
+    (s.series||[]).forEach(function(sr,i){html+=tvSeriesHtml(s.id,sr,i);});
     html+='<div class="proj-add-row"><input class="add-input" id="tv-series-input-'+s.id+'" placeholder="Series name (e.g. Series 1)…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTVSeries(\''+s.id+'\')" /><button class="add-btn" onclick="addTVSeries(\''+s.id+'\')">Add series</button></div>';
     html+='</div>';
   }
@@ -1355,12 +1405,13 @@ function tvShowCardHtml(s){
   return html;
 }
 
-function tvSeriesHtml(showId,sr){
+function tvSeriesHtml(showId,sr,idx){
   var eps=sr.episodes||[];
   var watchedCount=eps.filter(function(e){return e.watched;}).length;
   var isOpen=!!tvSeriesExpanded[sr.id];
   var html='<div>';
-  html+='<div class="tv-series-row" onclick="tvToggleSeries(\''+sr.id+'\')">';
+  html+='<div class="tv-series-row" draggable="true" data-idx="'+idx+'" data-show="'+showId+'" onclick="tvToggleSeries(\''+sr.id+'\')">';
+  html+='<span class="task-drag-handle">⠿</span>';
   html+='<span class="proj-chevron'+(isOpen?' open':'')+'">▶</span>';
   html+='<span class="tv-series-name">'+escHtml(sr.name)+'</span>';
   html+='<span class="proj-meta">'+watchedCount+'/'+eps.length+'</span>';
@@ -1388,6 +1439,57 @@ function tvSeriesHtml(showId,sr){
 
 function tvToggleShow(id){tvShowExpanded[id]=!tvShowExpanded[id];renderWatchlist();}
 function tvToggleSeries(id){tvSeriesExpanded[id]=!tvSeriesExpanded[id];renderWatchlist();}
+var tvShowDragSrcIdx=null,tvSeriesDragSrcIdx=null,tvSeriesDragShowId=null;
+function attachTVDragHandlers(){
+  document.querySelectorAll('.tv-show-card[draggable]').forEach(function(node){
+    node.addEventListener('dragstart',function(e){
+      e.stopPropagation();
+      tvShowDragSrcIdx=parseInt(this.getAttribute('data-idx'));
+      e.dataTransfer.effectAllowed='move';
+      this.style.opacity='0.5';
+    });
+    node.addEventListener('dragend',function(){this.style.opacity='';document.querySelectorAll('.tv-show-card').forEach(function(n){n.classList.remove('drag-over');});});
+    node.addEventListener('dragover',function(e){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';this.classList.add('drag-over');});
+    node.addEventListener('dragleave',function(){this.classList.remove('drag-over');});
+    node.addEventListener('drop',function(e){
+      e.preventDefault();e.stopPropagation();this.classList.remove('drag-over');
+      var toIdx=parseInt(this.getAttribute('data-idx'));
+      if(tvShowDragSrcIdx===null||tvShowDragSrcIdx===toIdx)return;
+      var shows=data.tvshows.filter(function(s){return!s.toWatch;});
+      var toWatch=data.tvshows.filter(function(s){return s.toWatch;});
+      var moved=shows.splice(tvShowDragSrcIdx,1)[0];
+      shows.splice(toIdx,0,moved);
+      data.tvshows=shows.concat(toWatch);
+      tvShowDragSrcIdx=null;
+      saveToDropbox();renderWatchlist();
+    });
+  });
+  document.querySelectorAll('.tv-series-row[draggable]').forEach(function(node){
+    node.addEventListener('dragstart',function(e){
+      e.stopPropagation();
+      tvSeriesDragSrcIdx=parseInt(this.getAttribute('data-idx'));
+      tvSeriesDragShowId=this.getAttribute('data-show');
+      e.dataTransfer.effectAllowed='move';
+      this.style.opacity='0.5';
+    });
+    node.addEventListener('dragend',function(){this.style.opacity='';document.querySelectorAll('.tv-series-row').forEach(function(n){n.classList.remove('drag-over');});});
+    node.addEventListener('dragover',function(e){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';this.classList.add('drag-over');});
+    node.addEventListener('dragleave',function(){this.classList.remove('drag-over');});
+    node.addEventListener('drop',function(e){
+      e.preventDefault();e.stopPropagation();this.classList.remove('drag-over');
+      var toIdx=parseInt(this.getAttribute('data-idx'));
+      var showId=this.getAttribute('data-show');
+      if(tvSeriesDragSrcIdx===null||tvSeriesDragSrcIdx===toIdx||tvSeriesDragShowId!==showId)return;
+      var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
+      var series=s.series||[];
+      var moved=series.splice(tvSeriesDragSrcIdx,1)[0];
+      series.splice(toIdx,0,moved);
+      s.series=series;
+      tvSeriesDragSrcIdx=null;tvSeriesDragShowId=null;
+      saveToDropbox();renderWatchlist();
+    });
+  });
+}
 
 function addTVShow(){
   var inp=el('tv-show-input');if(!inp)return;
@@ -1654,13 +1756,6 @@ ${[0,1,2,3,4,5,6].map(h=>`<option value="${h}"${bh===h?' selected':''}>${h===0?'
 <div class="settings-row">
 <div><div class="settings-label">View / copy your data</div><div class="settings-sub">Shows exactly what's currently stored on this device — no internet or Dropbox needed</div></div>
 <button class="add-btn secondary" onclick="renderBackup()">View</button>
-</div>
-</div>
-<div class="section-title">Data</div>
-<div class="card">
-<div class="settings-row">
-<div><div class="settings-label">Sync with Dropbox</div><div class="settings-sub">Pull the latest data now</div></div>
-<button class="add-btn secondary" onclick="syncDropbox()">↻ Sync</button>
 </div>
 </div>
 <div style="display:flex;align-items:center;justify-content:center;gap:0.75rem;margin-top:1.25rem;font-size:0.78rem;color:var(--muted)">
