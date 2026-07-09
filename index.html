@@ -367,6 +367,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'6.1',date:'9 Jul 2026',notes:'Fixed "Set up episodes" (and show/series Rename & Delete) being undone immediately by a click event bubbling into the row\'s own expand/collapse handler'},
   {v:'6.0',date:'9 Jul 2026',notes:'TV series bulk episode setup (numbered/named), per-series Grid/List display, episode ⋮ edit/delete menu, single-open accordion for shows/series, Watch list Home tile summary removed, Edit button moved to bottom-centre'},
   {v:'5.2',date:'8 Jul 2026',notes:'Home dashboard gets a subtle Edit mode for rearranging tiles (drag handles hidden otherwise), accurate overdue-statement count on the Home tile, fixed the doubled Dropbox folder path'},
   {v:'5.1',date:'8 Jul 2026',notes:'Drag-to-reorder for Home dashboard tiles and TV shows/series, removed the redundant Data/Sync section in Settings (Connection covers it)'},
@@ -1408,8 +1409,8 @@ function tvShowCardHtml(s,idx){
   html+='<span class="proj-meta">'+watchedEp+'/'+totalEp+'</span>';
   html+='<button class="opts-btn" onclick="event.stopPropagation();toggleOptsMenu(\'tvshow-'+s.id+'\',event)">⋮</button>';
   html+='<div class="opts-menu" id="opts-tvshow-'+s.id+'" style="right:0;top:2rem">';
-  html+='<button onclick="renameTVShow(\''+s.id+'\')">✏️ Rename</button>';
-  html+='<button class="danger-opt" onclick="deleteTVShow(\''+s.id+'\')">🗑 Delete</button>';
+  html+='<button onclick="event.stopPropagation();renameTVShow(\''+s.id+'\')">✏️ Rename</button>';
+  html+='<button class="danger-opt" onclick="event.stopPropagation();deleteTVShow(\''+s.id+'\')">🗑 Delete</button>';
   html+='</div></div>';
   html+='<div class="proj-progress-bar"><div class="proj-progress-fill" style="width:'+pct+'%"></div></div>';
   if(isOpen){
@@ -1436,9 +1437,9 @@ function tvSeriesHtml(showId,sr,idx){
   html+='<span class="proj-meta">'+watchedCount+'/'+eps.length+'</span>';
   html+='<button class="opts-btn" onclick="event.stopPropagation();toggleOptsMenu(\'tvseries-'+sr.id+'\',event)">⋮</button>';
   html+='<div class="opts-menu" id="opts-tvseries-'+sr.id+'" style="right:0;top:1.8rem">';
-  html+='<button onclick="renameTVSeries(\''+showId+'\',\''+sr.id+'\')">✏️ Rename</button>';
-  html+='<button onclick="renderTVSeriesSetup(\''+showId+'\',\''+sr.id+'\')">🔢 Set up episodes</button>';
-  html+='<button class="danger-opt" onclick="deleteTVSeries(\''+showId+'\',\''+sr.id+'\')">🗑 Delete</button>';
+  html+='<button onclick="event.stopPropagation();renameTVSeries(\''+showId+'\',\''+sr.id+'\')">✏️ Rename</button>';
+  html+='<button onclick="event.stopPropagation();renderTVSeriesSetup(\''+showId+'\',\''+sr.id+'\')">🔢 Set up episodes</button>';
+  html+='<button class="danger-opt" onclick="event.stopPropagation();deleteTVSeries(\''+showId+'\',\''+sr.id+'\')">🗑 Delete</button>';
   html+='</div></div>';
   if(isOpen){
     html+='<div class="tv-episodes">';
