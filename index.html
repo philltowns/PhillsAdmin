@@ -117,7 +117,7 @@ select.mini{background:var(--input-bg);border:1px solid var(--border);color:var(
 .bucket-tabs{display:flex;gap:0.4rem;margin-bottom:1rem;}
 .bucket-tab{flex:1;background:var(--card);border:1px solid var(--border);color:var(--muted);padding:0.5rem;border-radius:var(--radius-sm);font-size:0.78rem;font-family:var(--font);cursor:pointer;text-align:center;}
 .bucket-tab.active{background:var(--module-color);border-color:var(--module-color);color:#fff;}
-.task-item{display:flex;align-items:flex-start;gap:0.7rem;padding:0.65rem 0;border-bottom:1px solid var(--border);}
+.task-item{display:flex;align-items:flex-start;gap:0.7rem;padding:0.65rem 0;border-bottom:1px solid var(--border);position:relative;}
 .task-item:last-of-type{border-bottom:none;}
 .task-check{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);background:none;cursor:pointer;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;}
 .task-check.done{background:var(--success);border-color:var(--success);color:#000;}
@@ -183,7 +183,7 @@ select.mini{background:var(--input-bg);border:1px solid var(--border);color:var(
 .subtab-bar{display:flex;gap:0.5rem;margin-bottom:1rem;}
 .subtab-btn{flex:1;background:var(--card);border:1px solid var(--border);color:var(--muted);padding:0.6rem;border-radius:var(--radius-sm);font-family:var(--font);font-size:0.88rem;font-weight:600;cursor:pointer;}
 .subtab-btn.active{background:var(--module-color);border-color:var(--module-color);color:#fff;}
-.tv-series-row{display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0;border-bottom:1px solid var(--border);cursor:pointer;}
+.tv-series-row{display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0;border-bottom:1px solid var(--border);cursor:pointer;position:relative;}
 .tv-series-row:last-child{border-bottom:none;}
 .tv-series-name{flex:1;font-size:0.88rem;font-weight:500;}
 .tv-episodes{padding:0 0 0.5rem 1.4rem;}
@@ -241,7 +241,7 @@ input[type="date"]{color-scheme:dark;}
 .acct-modal label{font-size:0.72rem;color:var(--muted);display:block;margin-bottom:0.25rem;}
 .acct-modal-row{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;}
 .proj-card{background:var(--card);border-radius:var(--radius);margin-bottom:0.75rem;border:1px solid var(--border);}
-.proj-header{display:flex;align-items:center;gap:0.6rem;padding:0.75rem 0.9rem;cursor:pointer;}
+.proj-header{display:flex;align-items:center;gap:0.6rem;padding:0.75rem 0.9rem;cursor:pointer;position:relative;}
 .proj-title{flex:1;font-weight:600;font-size:0.95rem;}
 .proj-meta{font-size:0.75rem;color:var(--muted);white-space:nowrap;}
 .proj-chevron{font-size:0.7rem;color:var(--muted);transition:transform 0.2s;}
@@ -370,6 +370,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'6.3',date:'9 Jul 2026',notes:'Fixed ⋮ menus (To Do tasks, Projects, TV shows/series) opening at the top of the page instead of next to the button — a missing CSS anchor, most noticeable when scrolled down'},
   {v:'6.2',date:'9 Jul 2026',notes:'Home page shows a banner when Dropbox is disconnected, TV grid watched cells now show a big tick with the episode number as a small corner badge'},
   {v:'6.1',date:'9 Jul 2026',notes:'Fixed "Set up episodes" (and show/series Rename & Delete) being undone immediately by a click event bubbling into the row\'s own expand/collapse handler'},
   {v:'6.0',date:'9 Jul 2026',notes:'TV series bulk episode setup (numbered/named), per-series Grid/List display, episode ⋮ edit/delete menu, single-open accordion for shows/series, Watch list Home tile summary removed, Edit button moved to bottom-centre'},
