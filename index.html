@@ -186,6 +186,7 @@ select.mini{background:var(--input-bg);border:1px solid var(--border);color:var(
 .tv-series-row{display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0;border-bottom:1px solid var(--border);cursor:pointer;position:relative;}
 .tv-series-row:last-child{border-bottom:none;}
 .tv-series-name{flex:1;font-size:0.88rem;font-weight:500;}
+.tv-series-name.watched{text-decoration:line-through;color:var(--muted);}
 .tv-episodes{padding:0 0 0.5rem 1.4rem;}
 .watch-item{display:flex;align-items:center;gap:0.65rem;padding:0.65rem 0;border-bottom:1px solid var(--border);}
 .watch-item:last-child{border-bottom:none;}
@@ -370,6 +371,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'7.0',date:'13 Jul 2026',notes:'Watch list: TV tab now sits left of Movies. Fully-watched series shown with a struck-through title and a ✓ on the episode count. Replaced the free-text "Add series" box with a "🔢 Set up programme" wizard in the show ⋮ menu (enter a series count, auto-creates numbered series, additive only) plus a quick "Add new series" button inside it'},
   {v:'6.3',date:'9 Jul 2026',notes:'Fixed ⋮ menus (To Do tasks, Projects, TV shows/series) opening at the top of the page instead of next to the button — a missing CSS anchor, most noticeable when scrolled down'},
   {v:'6.2',date:'9 Jul 2026',notes:'Home page shows a banner when Dropbox is disconnected, TV grid watched cells now show a big tick with the episode number as a small corner badge'},
   {v:'6.1',date:'9 Jul 2026',notes:'Fixed "Set up episodes" (and show/series Rename & Delete) being undone immediately by a click event bubbling into the row\'s own expand/collapse handler'},
@@ -1327,8 +1329,8 @@ function openEditEntryModal(date){
 function renderWatchlist(){
   var mc=el('main-content');
   var tabs='<div class="subtab-bar">'+
-    '<button class="subtab-btn'+(currentWatchSub==='movies'?' active':'')+'" onclick="setWatchSub(\'movies\')">🎞️ Movies</button>'+
     '<button class="subtab-btn'+(currentWatchSub==='tv'?' active':'')+'" onclick="setWatchSub(\'tv\')">📺 TV</button>'+
+    '<button class="subtab-btn'+(currentWatchSub==='movies'?' active':'')+'" onclick="setWatchSub(\'movies\')">🎞️ Movies</button>'+
   '</div>';
   mc.innerHTML=tabs+(currentWatchSub==='tv'?tvSectionHtml():moviesSectionHtml());
   if(currentWatchSub==='tv')attachTVDragHandlers();
@@ -1417,14 +1419,14 @@ function tvShowCardHtml(s,idx){
   html+='<button class="opts-btn" onclick="event.stopPropagation();toggleOptsMenu(\'tvshow-'+s.id+'\',event)">⋮</button>';
   html+='<div class="opts-menu" id="opts-tvshow-'+s.id+'" style="right:0;top:2rem">';
   html+='<button onclick="event.stopPropagation();renameTVShow(\''+s.id+'\')">✏️ Rename</button>';
+  html+='<button onclick="event.stopPropagation();renderTVShowSetup(\''+s.id+'\')">🔢 Set up programme</button>';
   html+='<button class="danger-opt" onclick="event.stopPropagation();deleteTVShow(\''+s.id+'\')">🗑 Delete</button>';
   html+='</div></div>';
   html+='<div class="proj-progress-bar"><div class="proj-progress-fill" style="width:'+pct+'%"></div></div>';
   if(isOpen){
     html+='<div class="proj-tasks">';
-    if(!s.series||s.series.length===0)html+='<div class="empty-state" style="font-size:0.82rem;padding:0.5rem 0">No series yet.</div>';
+    if(!s.series||s.series.length===0)html+='<div class="empty-state" style="font-size:0.82rem;padding:0.5rem 0">No series yet. Use "🔢 Set up programme" above to add some.</div>';
     (s.series||[]).forEach(function(sr,i){html+=tvSeriesHtml(s.id,sr,i);});
-    html+='<div class="proj-add-row"><input class="add-input" id="tv-series-input-'+s.id+'" placeholder="Series name (e.g. Series 1)…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTVSeries(\''+s.id+'\')" /><button class="add-btn" onclick="addTVSeries(\''+s.id+'\')">Add series</button></div>';
     html+='</div>';
   }
   html+='</div>';
@@ -1434,14 +1436,15 @@ function tvShowCardHtml(s,idx){
 function tvSeriesHtml(showId,sr,idx){
   var eps=sr.episodes||[];
   var watchedCount=eps.filter(function(e){return e.watched;}).length;
+  var isFullyWatched=eps.length>0&&watchedCount===eps.length;
   var isOpen=(tvOpenSeriesId===sr.id);
   var mode=sr.displayMode||'list';
   var html='<div>';
   html+='<div class="tv-series-row" draggable="true" data-idx="'+idx+'" data-show="'+showId+'" onclick="tvToggleSeries(\''+sr.id+'\')">';
   html+='<span class="task-drag-handle">⠿</span>';
   html+='<span class="proj-chevron'+(isOpen?' open':'')+'">▶</span>';
-  html+='<span class="tv-series-name">'+escHtml(sr.name)+'</span>';
-  html+='<span class="proj-meta">'+watchedCount+'/'+eps.length+'</span>';
+  html+='<span class="tv-series-name'+(isFullyWatched?' watched':'')+'">'+escHtml(sr.name)+'</span>';
+  html+='<span class="proj-meta">'+(isFullyWatched?'<span style="color:var(--module-color)">✓</span> ':'')+watchedCount+'/'+eps.length+'</span>';
   html+='<button class="opts-btn" onclick="event.stopPropagation();toggleOptsMenu(\'tvseries-'+sr.id+'\',event)">⋮</button>';
   html+='<div class="opts-menu" id="opts-tvseries-'+sr.id+'" style="right:0;top:1.8rem">';
   html+='<button onclick="event.stopPropagation();renameTVSeries(\''+showId+'\',\''+sr.id+'\')">✏️ Rename</button>';
@@ -1567,15 +1570,51 @@ function renameTVShow(id){
   s.title=name.trim()||s.title;
   saveToDropbox();renderWatchlist();
 }
-function addTVSeries(showId){
-  var inp=el('tv-series-input-'+showId);if(!inp)return;
-  var name=inp.value.trim();if(!name)return;
+// TV SHOW SETUP — bulk-create series (numbered), plus quick add-one-more
+function renderTVShowSetup(showId,draftCount){
   var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
   if(!s.series)s.series=[];
-  var sr={id:uid(),name:name,episodes:[],displayMode:'list'};
-  s.series.push(sr);
-  tvOpenSeriesId=sr.id;
-  saveToDropbox();renderWatchlist();
+  var existingCount=s.series.length;
+  var count=draftCount||Math.max(existingCount,1);
+  var mc=el('main-content');
+  var html='<button class="add-btn secondary" onclick="renderWatchlist()" style="margin-bottom:0.75rem">‹ Back</button>';
+  html+='<div class="section-title" style="margin-top:0">'+escHtml(s.title)+' — set up programme</div>';
+  html+='<div class="card">';
+  if(existingCount>0){
+    html+='<div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem">This show already has '+existingCount+' series. Setting up more will only add new ones — existing series, episodes and watched status are kept.</div>';
+  }
+  html+='<div class="settings-row"><div class="settings-label">How many series in total?</div></div>';
+  html+='<input class="add-input" id="tvhs-count" type="number" min="1" value="'+count+'" style="margin-bottom:0.9rem" />';
+  html+='<button class="add-btn" onclick="tvShowSetupCreate(\''+showId+'\')">Create series</button>';
+  html+='</div>';
+  if(existingCount>0){
+    html+='<div class="card" style="margin-top:0.75rem">';
+    html+='<button class="add-btn secondary" onclick="tvShowSetupAddOne(\''+showId+'\')" style="width:100%">+ Add new series (Series '+(existingCount+1)+')</button>';
+    html+='</div>';
+  }
+  mc.innerHTML=html;
+}
+function tvShowSetupCreate(showId){
+  var inp=el('tvhs-count');if(!inp)return;
+  var count=parseInt(inp.value);if(!count||count<1)return;
+  var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
+  if(!s.series)s.series=[];
+  var existingCount=s.series.length;
+  var added=0;
+  for(var i=existingCount+1;i<=count;i++){s.series.push({id:uid(),name:'Series '+i,episodes:[],displayMode:'list'});added++;}
+  saveToDropbox();
+  showToast(added>0?'Added '+added+' series ✓':'Already at that count ✓');
+  tvOpenShowId=showId;
+  renderWatchlist();
+}
+function tvShowSetupAddOne(showId){
+  var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
+  if(!s.series)s.series=[];
+  var n=s.series.length+1;
+  s.series.push({id:uid(),name:'Series '+n,episodes:[],displayMode:'list'});
+  saveToDropbox();
+  showToast('Added Series '+n+' ✓');
+  renderTVShowSetup(showId);
 }
 function renameTVSeries(showId,seriesId){
   var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
