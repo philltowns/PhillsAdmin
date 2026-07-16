@@ -371,6 +371,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'7.1',date:'14 Jul 2026',notes:'Watch list now opens on the TV tab by default instead of Movies'},
   {v:'7.0',date:'13 Jul 2026',notes:'Watch list: TV tab now sits left of Movies. Fully-watched series shown with a struck-through title and a ✓ on the episode count. Replaced the free-text "Add series" box with a "🔢 Set up programme" wizard in the show ⋮ menu (enter a series count, auto-creates numbered series, additive only) plus a quick "Add new series" button inside it'},
   {v:'6.3',date:'9 Jul 2026',notes:'Fixed ⋮ menus (To Do tasks, Projects, TV shows/series) opening at the top of the page instead of next to the button — a missing CSS anchor, most noticeable when scrolled down'},
   {v:'6.2',date:'9 Jul 2026',notes:'Home page shows a banner when Dropbox is disconnected, TV grid watched cells now show a big tick with the episode number as a small corner badge'},
@@ -397,7 +398,7 @@ let data={
 };
 let accessToken=null,currentTab='home',currentBucket='today';
 let currentWatchFilter='all',weightChart=null;
-let currentWatchSub='movies',tvOpenShowId=null,tvOpenSeriesId=null;
+let currentWatchSub='tv',tvOpenShowId=null,tvOpenSeriesId=null;
 let editingTaskId=null,editingEntryDate=null,longPressTimer=null;
 
 function el(id){return document.getElementById(id);}
