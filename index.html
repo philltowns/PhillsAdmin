@@ -102,8 +102,9 @@ select.mini{background:var(--input-bg);border:1px solid var(--border);color:var(
 .home-tile-editing{outline:1px dashed var(--border);}
 .home-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;}
 .home-tile{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:0.875rem;cursor:pointer;position:relative;overflow:hidden;}
-.home-tile-icon{font-size:1.4rem;margin-bottom:0.4rem;}
-.home-tile-name{font-size:0.7rem;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);margin-bottom:0.2rem;}
+.home-tile-header{display:flex;align-items:center;justify-content:center;gap:0.4rem;margin-bottom:0.3rem;}
+.home-tile-icon{font-size:1.1rem;}
+.home-tile-name{font-size:0.9rem;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--text);}
 .home-tile-summary{font-size:0.8rem;color:var(--text);line-height:1.4;}
 .home-tile-accent{position:absolute;top:0;left:0;width:3px;height:100%;}
 .home-tile[data-nav="todo"] .home-tile-accent{background:#7060d0;}
@@ -371,6 +372,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'7.2',date:'18 Jul 2026',notes:'Removed the free-text "Add episode" box — episodes are now added via the "🔢 Set up episodes" wizard, which gained a quick "+ Add new episode" button. New series now default to Grid display style instead of List. Home tiles: icon and title now sit on one centred row (larger, still bold/uppercase), summary line unchanged'},
   {v:'7.1',date:'14 Jul 2026',notes:'Watch list now opens on the TV tab by default instead of Movies'},
   {v:'7.0',date:'13 Jul 2026',notes:'Watch list: TV tab now sits left of Movies. Fully-watched series shown with a struck-through title and a ✓ on the episode count. Replaced the free-text "Add series" box with a "🔢 Set up programme" wizard in the show ⋮ menu (enter a series count, auto-creates numbered series, additive only) plus a quick "Add new series" button inside it'},
   {v:'6.3',date:'9 Jul 2026',notes:'Fixed ⋮ menus (To Do tasks, Projects, TV shows/series) opening at the top of the page instead of next to the button — a missing CSS anchor, most noticeable when scrolled down'},
@@ -635,7 +637,7 @@ function renderHome(){
     var drag=homeEditMode?' draggable="true"':'';
     var editCls=homeEditMode?' home-tile-editing':'';
     var summaryHtml=d.summary?'<div class="home-tile-summary">'+d.summary+'</div>':'';
-    return '<div class="home-tile'+editCls+'"'+drag+' data-idx="'+i+'" data-key="'+key+'" data-nav="'+key+'" onclick="homeTileClick(this,\''+key+'\')">'+handle+'<div class="home-tile-accent"></div><div class="home-tile-icon">'+d.icon+'</div><div class="home-tile-name">'+d.name+'</div>'+summaryHtml+'</div>';
+    return '<div class="home-tile'+editCls+'"'+drag+' data-idx="'+i+'" data-key="'+key+'" data-nav="'+key+'" onclick="homeTileClick(this,\''+key+'\')">'+handle+'<div class="home-tile-accent"></div><div class="home-tile-header"><span class="home-tile-icon">'+d.icon+'</span><span class="home-tile-name">'+d.name+'</span></div>'+summaryHtml+'</div>';
   }).join('');
   var dbxBanner=dropboxStatus!=='ok'?'<div class="dbx-banner">⚠ Dropbox disconnected — changes are only saved on this device. <button onclick="reconnectDropbox()">Reconnect</button></div>':'';
   mc.innerHTML=`
@@ -1455,7 +1457,7 @@ function tvSeriesHtml(showId,sr,idx){
   if(isOpen){
     html+='<div class="tv-episodes">';
     if(eps.length===0){
-      html+='<div class="empty-state" style="font-size:0.8rem;padding:0.4rem 0">No episodes yet — add one below, or use "🔢 Set up episodes" above to create several at once.</div>';
+      html+='<div class="empty-state" style="font-size:0.8rem;padding:0.4rem 0">No episodes yet. Use "🔢 Set up episodes" above to add some.</div>';
     }else if(mode==='grid'){
       html+='<div class="tv-ep-grid">';
       eps.forEach(function(e){
@@ -1478,7 +1480,6 @@ function tvSeriesHtml(showId,sr,idx){
         html+='</div>';
       });
     }
-    html+='<div class="proj-add-row"><input class="add-input" id="tv-ep-input-'+sr.id+'" placeholder="Episode (e.g. E5 or a name)…" style="flex:1" onkeydown="if(event.key===\'Enter\')addTVEpisode(\''+showId+'\',\''+sr.id+'\')" /><button class="add-btn" onclick="addTVEpisode(\''+showId+'\',\''+sr.id+'\')">Add</button></div>';
     html+='</div>';
   }
   html+='</div>';
@@ -1602,7 +1603,7 @@ function tvShowSetupCreate(showId){
   if(!s.series)s.series=[];
   var existingCount=s.series.length;
   var added=0;
-  for(var i=existingCount+1;i<=count;i++){s.series.push({id:uid(),name:'Series '+i,episodes:[],displayMode:'list'});added++;}
+  for(var i=existingCount+1;i<=count;i++){s.series.push({id:uid(),name:'Series '+i,episodes:[],displayMode:'grid'});added++;}
   saveToDropbox();
   showToast(added>0?'Added '+added+' series ✓':'Already at that count ✓');
   tvOpenShowId=showId;
@@ -1612,7 +1613,7 @@ function tvShowSetupAddOne(showId){
   var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
   if(!s.series)s.series=[];
   var n=s.series.length+1;
-  s.series.push({id:uid(),name:'Series '+n,episodes:[],displayMode:'list'});
+  s.series.push({id:uid(),name:'Series '+n,episodes:[],displayMode:'grid'});
   saveToDropbox();
   showToast('Added Series '+n+' ✓');
   renderTVShowSetup(showId);
@@ -1631,14 +1632,16 @@ function deleteTVSeries(showId,seriesId){
   if(tvOpenSeriesId===seriesId)tvOpenSeriesId=null;
   saveToDropbox();renderWatchlist();
 }
-function addTVEpisode(showId,seriesId){
-  var inp=el('tv-ep-input-'+seriesId);if(!inp)return;
-  var label=inp.value.trim();if(!label)return;
+function tvSeriesSetupAddOne(showId,seriesId){
   var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
   var sr=(s.series||[]).find(function(x){return x.id===seriesId;});if(!sr)return;
+  var label=prompt('New episode name (e.g. E5 or a title)');if(!label)return;
+  label=label.trim();if(!label)return;
   if(!sr.episodes)sr.episodes=[];
   sr.episodes.push({id:uid(),label:label,watched:false});
-  saveToDropbox();renderWatchlist();
+  saveToDropbox();
+  showToast('Added episode ✓');
+  renderTVSeriesSetup(showId,seriesId);
 }
 function toggleTVEpisode(showId,seriesId,epId){
   var s=data.tvshows.find(function(x){return x.id===showId;});if(!s)return;
@@ -1709,6 +1712,9 @@ function renderTVSeriesSetup(showId,seriesId,step,draftCount,draftNaming){
     html+='</div>';
   }
   html+='</div>';
+  if(step===1){
+    html+='<div class="card" style="margin-top:0.75rem"><button class="add-btn secondary" onclick="tvSeriesSetupAddOne(\''+showId+'\',\''+seriesId+'\')" style="width:100%">+ Add new episode</button></div>';
+  }
   mc.innerHTML=html;
 }
 function setTVSeriesDisplayMode(showId,seriesId,mode){
