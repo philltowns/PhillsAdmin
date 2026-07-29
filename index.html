@@ -373,6 +373,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'7.5',date:'21 Jul 2026',notes:'Weight: fixed dual-display clutter — when "Show st & lb" is on, weights now show st/lb only (not alongside kg) for the latest weight, history entries, Total change and From target. Birthdays: replaced the date-picker field (which silently discarded any year you entered there) with separate Day/Month number fields — Birth year (optional) is now the single source of year data, fixing missing "age at next birthday" for people whose full DOB was entered but year field was left blank'},
   {v:'7.4',date:'20 Jul 2026',notes:'Weight: added a dedicated settings page (⚙ on the Log weight card) for Target and Height, decluttering the main page. Added a "Show st & lb" toggle on the main page — when on, stone/lb equivalents appear alongside the latest weight, history entries, Total change and From target (chart stays kg-only)'},
   {v:'7.3',date:'19 Jul 2026',notes:'Home tiles: summary text now centred instead of left-aligned, and all tiles are now a uniform height regardless of content. Weight tile no longer shows the date, just the latest weight'},
   {v:'7.2',date:'18 Jul 2026',notes:'Removed the free-text "Add episode" box — episodes are now added via the "🔢 Set up episodes" wizard, which gained a quick "+ Add new episode" button. New series now default to Grid display style instead of List. Home tiles: icon and title now sit on one centred row (larger, still bold/uppercase), summary line unchanged'},
@@ -1068,7 +1069,8 @@ ${rest.length===0&&(upcoming.length>0||today.length>0)?`<div class="empty-state"
 <div style="margin-top:0.75rem">
 <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
 <input class="add-input" id="bday-name" placeholder="Name" style="flex:1;min-width:100px" />
-<input class="add-input" id="bday-date" type="date" style="width:auto;flex-shrink:0" />
+<input class="add-input" id="bday-day" type="number" placeholder="DD" style="width:60px;flex-shrink:0" min="1" max="31" />
+<input class="add-input" id="bday-month" type="number" placeholder="MM" style="width:60px;flex-shrink:0" min="1" max="12" />
 </div>
 <div style="display:flex;gap:0.5rem;align-items:center">
 <input class="add-input" id="bday-year" type="number" placeholder="Birth year (optional)" style="flex:1" min="1900" max="${new Date().getFullYear()}" />
@@ -1078,10 +1080,15 @@ ${rest.length===0&&(upcoming.length>0||today.length>0)?`<div class="empty-state"
 </div>`;
 }
 function addBirthday(){
-  const name=el('bday-name').value.trim();const v=el('bday-date').value;
-  if(!name||!v)return;
+  const name=el('bday-name').value.trim();
+  const day=parseInt(el('bday-day').value);
+  const month=parseInt(el('bday-month').value);
+  if(!name||!day||!month)return;
+  const daysInMonth=[31,29,31,30,31,30,31,31,30,31,30,31];
+  if(month<1||month>12||day<1||day>daysInMonth[month-1]){showToast('Enter a valid day/month');return;}
+  const mmdd=String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
   const yearVal=el('bday-year').value;
-  data.birthdays.push({id:uid(),name,mmdd:v.slice(5),year:yearVal?parseInt(yearVal):null});
+  data.birthdays.push({id:uid(),name,mmdd,year:yearVal?parseInt(yearVal):null});
   saveToDropbox();renderBirthdays();
 }
 function deleteBirthday(id){data.birthdays=data.birthdays.filter(x=>x.id!==id);saveToDropbox();renderBirthdays();}
@@ -1793,11 +1800,10 @@ function renderWeight(){
 <button class="switch${imp?' on':''}" onclick="toggleWeightImperial()"><span class="switch-dot"></span></button>
 </div>
 ${latest?`<div class="weight-hero">
-<div class="weight-latest-val">${latest.kg} <span style="font-size:1rem;color:var(--muted)">kg</span></div>
-${imp?`<div style="font-size:0.85rem;color:var(--muted);margin-top:0.1rem">${fmtStoneLb(latest.kg)}</div>`:''}
+<div class="weight-latest-val">${imp?fmtStoneLb(latest.kg):latest.kg+' <span style="font-size:1rem;color:var(--muted)">kg</span>'}</div>
 <div class="weight-latest-lbl">${fmtDate(latest.date)}</div>
 ${bmi?`<div style="font-size:0.85rem;color:${bmiCat.color};margin-top:0.3rem">BMI ${bmi} — ${bmiCat.label}</div>`:''}
-${change!==null?`<div style="font-size:0.8rem;color:${parseFloat(change)<0?'var(--success)':'var(--danger)'};margin-top:0.15rem">${parseFloat(change)>0?'+':''}${change} kg overall${imp?' · '+fmtLbsDelta(parseFloat(change)):''}</div>`:''}
+${change!==null?`<div style="font-size:0.8rem;color:${parseFloat(change)<0?'var(--success)':'var(--danger)'};margin-top:0.15rem">${imp?fmtLbsDelta(parseFloat(change)):(parseFloat(change)>0?'+':'')+change+' kg'} overall</div>`:''}
 </div>`:''}
 <div class="card" style="margin-bottom:0.75rem">
 <div class="section-title" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">Log weight<button class="opts-btn" onclick="renderWeightSettings()" title="Weight settings">⚙</button></div>
@@ -1812,16 +1818,15 @@ ${entries.length>1?`<div class="card" style="margin-bottom:0.75rem"><canvas id="
 ${entries.length?`
 <div class="weight-stats">
 <div class="weight-stat"><div class="weight-stat-val">${entries.length}</div><div class="weight-stat-lbl">Entries</div></div>
-${data.weight.target?`<div class="weight-stat"><div class="weight-stat-val" style="color:${latest&&latest.kg<=data.weight.target?'var(--success)':'var(--danger)'}">${latest?(latest.kg-data.weight.target).toFixed(1):'—'}${latest&&imp?`<div style="font-size:0.62rem;color:var(--muted);font-weight:400;margin-top:0.1rem">${fmtLbsDelta(latest.kg-data.weight.target)}</div>`:''}</div><div class="weight-stat-lbl">From target</div></div>`:''}
-${change!==null?`<div class="weight-stat"><div class="weight-stat-val" style="color:${parseFloat(change)<0?'var(--success)':'var(--danger)'}">${parseFloat(change)>0?'+':''}${change}${imp?`<div style="font-size:0.62rem;color:var(--muted);font-weight:400;margin-top:0.1rem">${fmtLbsDelta(parseFloat(change))}</div>`:''}</div><div class="weight-stat-lbl">Total change</div></div>`:''}
+${data.weight.target?`<div class="weight-stat"><div class="weight-stat-val" style="color:${latest&&latest.kg<=data.weight.target?'var(--success)':'var(--danger)'}">${latest?(imp?fmtLbsDelta(latest.kg-data.weight.target):(latest.kg-data.weight.target).toFixed(1)):'—'}</div><div class="weight-stat-lbl">From target</div></div>`:''}
+${change!==null?`<div class="weight-stat"><div class="weight-stat-val" style="color:${parseFloat(change)<0?'var(--success)':'var(--danger)'}">${imp?fmtLbsDelta(parseFloat(change)):(parseFloat(change)>0?'+':'')+change}</div><div class="weight-stat-lbl">Total change</div></div>`:''}
 </div>
 <div class="section-title">History</div>
 <div class="card">${[...entries].reverse().slice(0,25).map(e=>`
 <div class="task-item">
 <div style="flex:1;font-size:0.83rem">${fmtDate(e.date)}</div>
 <div style="text-align:right">
-<div style="font-family:var(--mono);font-size:0.88rem">${e.kg} kg${data.weight.heightCm?` · BMI ${bmiFromWeight(e.kg)}`:''}</div>
-${imp?`<div style="font-size:0.72rem;color:var(--muted)">${fmtStoneLb(e.kg)}</div>`:''}
+<div style="font-family:var(--mono);font-size:0.88rem">${imp?fmtStoneLb(e.kg):e.kg+' kg'}${data.weight.heightCm?` · BMI ${bmiFromWeight(e.kg)}`:''}</div>
 </div>
 <button class="del-btn" onclick="deleteWeight('${e.id}')">✕</button>
 </div>`).join('')}</div>
