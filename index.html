@@ -373,6 +373,7 @@ const RAINBOW_COLORS=['#c084fc','#818cf8','#60a5fa','#34d399','#a3e635','#fbbf24
 // CHANGELOG — add a new entry to the TOP each time we ship a batch of changes.
 // Small/incremental updates: bump the decimal (8.1, 8.2...). New functionality: bump the integer (9.0, 10.0...).
 const CHANGELOG=[
+  {v:'7.6',date:'22 Jul 2026',notes:'Fixed journal bug: adding a second "Add entry for a previous date" for a date that already had one was overwriting it — it now appends as a new line instead'},
   {v:'7.5',date:'21 Jul 2026',notes:'Weight: fixed dual-display clutter — when "Show st & lb" is on, weights now show st/lb only (not alongside kg) for the latest weight, history entries, Total change and From target. Birthdays: replaced the date-picker field (which silently discarded any year you entered there) with separate Day/Month number fields — Birth year (optional) is now the single source of year data, fixing missing "age at next birthday" for people whose full DOB was entered but year field was left blank'},
   {v:'7.4',date:'20 Jul 2026',notes:'Weight: added a dedicated settings page (⚙ on the Log weight card) for Target and Height, decluttering the main page. Added a "Show st & lb" toggle on the main page — when on, stone/lb equivalents appear alongside the latest weight, history entries, Total change and From target (chart stays kg-only)'},
   {v:'7.3',date:'19 Jul 2026',notes:'Home tiles: summary text now centred instead of left-aligned, and all tiles are now a uniform height regardless of content. Weight tile no longer shows the date, just the latest weight'},
@@ -1324,7 +1325,7 @@ function saveJournal(){
 function addPastEntry(){
   const date=el('past-date').value;const text=el('past-text').value.trim();if(!date||!text)return;
   const idx=data.journal.findIndex(e=>e.date===date);
-  if(idx>=0)data.journal[idx].text=text;else data.journal.push({id:uid(),date,text});
+  if(idx>=0)data.journal[idx].text+='\n'+text;else data.journal.push({id:uid(),date,text});
   saveToDropbox();showToast('Entry added ✓');renderJournal();
 }
 function startLongPress(date){longPressTimer=setTimeout(()=>openEditEntryModal(date),550);}
